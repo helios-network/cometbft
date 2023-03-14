@@ -1,0 +1,60 @@
+syntax = "proto3";
+package tendermint.services.block.v1;
+
+option go_package = "github.com/tendermint/tendermint/proto/tendermint/services/block/v1";
+
+import "tendermint/abci/types.proto";
+import "tendermint/types/types.proto";
+import "tendermint/types/block.proto";
+
+message GetLatestBlockIDRequest {}
+
+// GetLatestBlockIDResponse is a lightweight reference to the latest committed
+// block.
+message GetLatestBlockIDResponse {
+    // The height of the latest committed block.
+    int64 height = 1;
+
+    // The ID of the latest committed block.
+    tendermint.types.BlockID block_id = 2;
+}
+
+message GetBlockRequest {
+    // The height of the block to get. If empty or set to 0, the block
+    // associated with the latest height will be returned.
+    int64 height = 1;
+}
+
+message GetBlockResponse {
+    // The height of the block being returned.
+    int64 height = 1;
+
+    // Block data for the requested height.
+    tendermint.types.Block block = 2;
+}
+
+message GetBlockResultsRequest {
+    // The height of the block results to get. If empty or set to 0, the block
+    // results associated with the latest height will be returned.
+    int64 height = 1;
+}
+
+message GetBlockResultsResponse {
+    // The height of the block whose results are returned in this structure.
+    int64 height = 1;
+
+    // All events produced by the ABCI BeginBlock call for the block.
+    repeated tendermint.abci.Event begin_block_events = 2;
+
+    // All transaction results produced by block execution.
+    repeated tendermint.abci.ResponseDeliverTx tx_results = 3;
+
+    // Validator updates during block execution.
+    repeated tendermint.abci.ValidatorUpdate validator_updates = 4;
+
+    // Consensus parameter updates during block execution.
+    tendermint.abci.ConsensusParams consensus_param_updates = 5;
+
+    // All events produced by the ABCI EndBlock call.
+    repeated tendermint.abci.Event end_block_events = 6;
+}

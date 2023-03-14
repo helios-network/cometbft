@@ -1,0 +1,23 @@
+syntax = "proto3";
+package tendermint.services.block.v1;
+
+option go_package = "github.com/tendermint/tendermint/proto/tendermint/services/block/v1";
+
+import "tendermint/services/block/v1/block.proto";
+
+// BlockService provides information about blocks.
+service BlockService {
+    // GetLatestBlockID returns a stream of the latest block IDs as they are
+    // committed by the network.
+    rpc GetLatestBlockID(GetLatestBlockIDRequest) returns (stream GetLatestBlockIDResponse) {}
+
+    // GetBlock attempts to retrieve the block at a particular height,
+    // including all of its transactions.
+    rpc GetBlock(GetBlockRequest) returns (GetBlockResponse) {}
+
+    // GetBlockResults attempts to retrieve the results of block execution for
+    // a particular height, including all events and transaction execution
+    // results.
+    rpc GetBlockResults(GetBlockResultsRequest) returns (GetBlockResultsResponse) {}
+}
+
