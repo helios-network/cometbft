@@ -18,7 +18,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
-	core_grpc "github.com/tendermint/tendermint/rpc/grpc"
+	"github.com/tendermint/tendermint/rpc/grpc"
 	rpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 )
 
@@ -29,11 +29,13 @@ type Options struct {
 	recreateConfig bool
 }
 
-var globalConfig *cfg.Config
-var defaultOptions = Options{
-	suppressStdout: false,
-	recreateConfig: false,
-}
+var (
+	globalConfig   *cfg.Config
+	defaultOptions = Options{
+		suppressStdout: false,
+		recreateConfig: false,
+	}
+)
 
 func waitForRPC() {
 	laddr := GetConfig().RPC.ListenAddress
@@ -56,7 +58,7 @@ func waitForRPC() {
 func waitForGRPC() {
 	client := GetGRPCClient()
 	for {
-		_, err := client.Ping(context.Background(), &core_grpc.RequestPing{})
+		_, err := client.Ping(context.Background(), &coregrpc.RequestPing{})
 		if err == nil {
 			return
 		}
@@ -110,9 +112,9 @@ func GetConfig(forceCreate ...bool) *cfg.Config {
 	return globalConfig
 }
 
-func GetGRPCClient() core_grpc.BroadcastAPIClient {
+func GetGRPCClient() coregrpc.BroadcastAPIClient {
 	grpcAddr := globalConfig.RPC.GRPCListenAddress
-	return core_grpc.StartGRPCClient(grpcAddr)
+	return coregrpc.StartGRPCClient(grpcAddr)
 }
 
 // StartTendermint starts a test CometBFT server in a go routine and returns when it is initialized

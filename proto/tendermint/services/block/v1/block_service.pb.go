@@ -35,18 +35,18 @@ var fileDescriptor_1488dadaa3ae41e3 = []byte{
 	0x49, 0x2d, 0xca, 0xcd, 0xcc, 0x2b, 0xd1, 0x2f, 0x4e, 0x2d, 0x2a, 0xcb, 0x4c, 0x4e, 0x2d, 0xd6,
 	0x4f, 0xca, 0xc9, 0x4f, 0xce, 0xd6, 0x2f, 0x33, 0x84, 0x30, 0xe2, 0xa1, 0xe2, 0x7a, 0x05, 0x45,
 	0xf9, 0x25, 0xf9, 0x42, 0x32, 0x08, 0x1d, 0x7a, 0x30, 0x1d, 0x7a, 0x60, 0x85, 0x7a, 0x65, 0x86,
-	0x52, 0x1a, 0x84, 0xcd, 0x83, 0x98, 0x63, 0xd4, 0xc6, 0xcc, 0xc5, 0xe3, 0x04, 0xe2, 0x07, 0x43,
-	0x94, 0x09, 0xb5, 0x32, 0x72, 0x09, 0xb8, 0xa7, 0x96, 0xf8, 0x24, 0x96, 0xa4, 0x16, 0x97, 0x80,
-	0x65, 0x3c, 0x5d, 0x84, 0x4c, 0xf5, 0xf0, 0x59, 0xa7, 0x87, 0xae, 0x3e, 0x28, 0xb5, 0xb0, 0x34,
-	0xb5, 0xb8, 0x44, 0xca, 0x8c, 0x54, 0x6d, 0xc5, 0x05, 0xf9, 0x79, 0xc5, 0xa9, 0x4a, 0x0c, 0x06,
-	0x8c, 0x42, 0xd9, 0x5c, 0x1c, 0xee, 0xa9, 0x10, 0x19, 0x21, 0x5d, 0x82, 0xe6, 0x80, 0xd5, 0xc1,
-	0xac, 0xd5, 0x23, 0x56, 0x39, 0xcc, 0x3a, 0xa1, 0x06, 0x46, 0x2e, 0x7e, 0x24, 0xe1, 0xd2, 0x9c,
-	0x92, 0x62, 0x21, 0x13, 0xa2, 0x4d, 0x01, 0x29, 0x87, 0xd9, 0x6d, 0x4a, 0xa2, 0x2e, 0x98, 0x13,
-	0x9c, 0x62, 0x4f, 0x3c, 0x92, 0x63, 0xbc, 0xf0, 0x48, 0x8e, 0xf1, 0xc1, 0x23, 0x39, 0xc6, 0x09,
-	0x8f, 0xe5, 0x18, 0x2e, 0x3c, 0x96, 0x63, 0xb8, 0xf1, 0x58, 0x8e, 0x21, 0xca, 0x39, 0x3d, 0xb3,
-	0x24, 0xa3, 0x34, 0x49, 0x2f, 0x39, 0x3f, 0x57, 0x1f, 0x29, 0x5e, 0x91, 0x98, 0xe0, 0xa8, 0xd4,
-	0xc7, 0x17, 0xe7, 0x49, 0x6c, 0x60, 0x35, 0xc6, 0x80, 0x00, 0x00, 0x00, 0xff, 0xff, 0x27, 0x56,
-	0x0f, 0x8d, 0x6a, 0x02, 0x00, 0x00,
+	0x52, 0x1a, 0x84, 0xcd, 0x83, 0x98, 0x63, 0xd4, 0xcc, 0xcc, 0xc5, 0xe3, 0x04, 0xe2, 0x07, 0x43,
+	0x94, 0x09, 0x35, 0x31, 0x72, 0xf1, 0xbb, 0xa7, 0x96, 0xf8, 0x24, 0x96, 0xa4, 0x16, 0x97, 0x78,
+	0xa4, 0x66, 0xa6, 0x67, 0x94, 0x08, 0x99, 0xe8, 0xe1, 0xb3, 0x4d, 0x0f, 0x4d, 0x79, 0x50, 0x6a,
+	0x61, 0x69, 0x6a, 0x71, 0x89, 0x94, 0x29, 0x89, 0xba, 0x8a, 0x0b, 0xf2, 0xf3, 0x8a, 0x53, 0x95,
+	0x18, 0x0c, 0x18, 0x85, 0xb2, 0xb9, 0x38, 0xdc, 0x53, 0x4b, 0xc0, 0xee, 0x12, 0xd2, 0x25, 0x68,
+	0x0c, 0x58, 0x1d, 0xcc, 0x56, 0x3d, 0x62, 0x95, 0xc3, 0xac, 0x13, 0x6a, 0x80, 0xf8, 0x18, 0x26,
+	0x5c, 0x9a, 0x53, 0x52, 0x4c, 0x84, 0x8f, 0x91, 0x95, 0x13, 0xef, 0x63, 0x54, 0x5d, 0x30, 0x27,
+	0x38, 0xc5, 0x9e, 0x78, 0x24, 0xc7, 0x78, 0xe1, 0x91, 0x1c, 0xe3, 0x83, 0x47, 0x72, 0x8c, 0x13,
+	0x1e, 0xcb, 0x31, 0x5c, 0x78, 0x2c, 0xc7, 0x70, 0xe3, 0xb1, 0x1c, 0x43, 0x94, 0x73, 0x7a, 0x66,
+	0x49, 0x46, 0x69, 0x92, 0x5e, 0x72, 0x7e, 0xae, 0x3e, 0x52, 0xa4, 0x22, 0x31, 0xc1, 0xf1, 0xa8,
+	0x8f, 0x2f, 0xc2, 0x93, 0xd8, 0xc0, 0x6a, 0x8c, 0x01, 0x01, 0x00, 0x00, 0xff, 0xff, 0xbb, 0xd4,
+	0xe1, 0x47, 0x67, 0x02, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -61,9 +61,9 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type BlockServiceClient interface {
-	// GetLatestBlockID returns a stream of the latest block IDs as they are
-	// committed by the network.
-	GetLatestBlockID(ctx context.Context, in *GetLatestBlockIDRequest, opts ...grpc.CallOption) (BlockService_GetLatestBlockIDClient, error)
+	// GetLatestHeight returns a stream of the latest block heights as blocks
+	// are committed at those heights.
+	GetLatestHeight(ctx context.Context, in *GetLatestHeightRequest, opts ...grpc.CallOption) (BlockService_GetLatestHeightClient, error)
 	// GetBlock attempts to retrieve the block at a particular height,
 	// including all of its transactions.
 	GetBlock(ctx context.Context, in *GetBlockRequest, opts ...grpc.CallOption) (*GetBlockResponse, error)
@@ -81,12 +81,12 @@ func NewBlockServiceClient(cc grpc1.ClientConn) BlockServiceClient {
 	return &blockServiceClient{cc}
 }
 
-func (c *blockServiceClient) GetLatestBlockID(ctx context.Context, in *GetLatestBlockIDRequest, opts ...grpc.CallOption) (BlockService_GetLatestBlockIDClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_BlockService_serviceDesc.Streams[0], "/tendermint.services.block.v1.BlockService/GetLatestBlockID", opts...)
+func (c *blockServiceClient) GetLatestHeight(ctx context.Context, in *GetLatestHeightRequest, opts ...grpc.CallOption) (BlockService_GetLatestHeightClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_BlockService_serviceDesc.Streams[0], "/tendermint.services.block.v1.BlockService/GetLatestHeight", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &blockServiceGetLatestBlockIDClient{stream}
+	x := &blockServiceGetLatestHeightClient{stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -96,17 +96,17 @@ func (c *blockServiceClient) GetLatestBlockID(ctx context.Context, in *GetLatest
 	return x, nil
 }
 
-type BlockService_GetLatestBlockIDClient interface {
-	Recv() (*GetLatestBlockIDResponse, error)
+type BlockService_GetLatestHeightClient interface {
+	Recv() (*GetLatestHeightResponse, error)
 	grpc.ClientStream
 }
 
-type blockServiceGetLatestBlockIDClient struct {
+type blockServiceGetLatestHeightClient struct {
 	grpc.ClientStream
 }
 
-func (x *blockServiceGetLatestBlockIDClient) Recv() (*GetLatestBlockIDResponse, error) {
-	m := new(GetLatestBlockIDResponse)
+func (x *blockServiceGetLatestHeightClient) Recv() (*GetLatestHeightResponse, error) {
+	m := new(GetLatestHeightResponse)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -133,9 +133,9 @@ func (c *blockServiceClient) GetBlockResults(ctx context.Context, in *GetBlockRe
 
 // BlockServiceServer is the server API for BlockService service.
 type BlockServiceServer interface {
-	// GetLatestBlockID returns a stream of the latest block IDs as they are
-	// committed by the network.
-	GetLatestBlockID(*GetLatestBlockIDRequest, BlockService_GetLatestBlockIDServer) error
+	// GetLatestHeight returns a stream of the latest block heights as blocks
+	// are committed at those heights.
+	GetLatestHeight(*GetLatestHeightRequest, BlockService_GetLatestHeightServer) error
 	// GetBlock attempts to retrieve the block at a particular height,
 	// including all of its transactions.
 	GetBlock(context.Context, *GetBlockRequest) (*GetBlockResponse, error)
@@ -149,8 +149,8 @@ type BlockServiceServer interface {
 type UnimplementedBlockServiceServer struct {
 }
 
-func (*UnimplementedBlockServiceServer) GetLatestBlockID(req *GetLatestBlockIDRequest, srv BlockService_GetLatestBlockIDServer) error {
-	return status.Errorf(codes.Unimplemented, "method GetLatestBlockID not implemented")
+func (*UnimplementedBlockServiceServer) GetLatestHeight(req *GetLatestHeightRequest, srv BlockService_GetLatestHeightServer) error {
+	return status.Errorf(codes.Unimplemented, "method GetLatestHeight not implemented")
 }
 func (*UnimplementedBlockServiceServer) GetBlock(ctx context.Context, req *GetBlockRequest) (*GetBlockResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBlock not implemented")
@@ -163,24 +163,24 @@ func RegisterBlockServiceServer(s grpc1.Server, srv BlockServiceServer) {
 	s.RegisterService(&_BlockService_serviceDesc, srv)
 }
 
-func _BlockService_GetLatestBlockID_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(GetLatestBlockIDRequest)
+func _BlockService_GetLatestHeight_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetLatestHeightRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(BlockServiceServer).GetLatestBlockID(m, &blockServiceGetLatestBlockIDServer{stream})
+	return srv.(BlockServiceServer).GetLatestHeight(m, &blockServiceGetLatestHeightServer{stream})
 }
 
-type BlockService_GetLatestBlockIDServer interface {
-	Send(*GetLatestBlockIDResponse) error
+type BlockService_GetLatestHeightServer interface {
+	Send(*GetLatestHeightResponse) error
 	grpc.ServerStream
 }
 
-type blockServiceGetLatestBlockIDServer struct {
+type blockServiceGetLatestHeightServer struct {
 	grpc.ServerStream
 }
 
-func (x *blockServiceGetLatestBlockIDServer) Send(m *GetLatestBlockIDResponse) error {
+func (x *blockServiceGetLatestHeightServer) Send(m *GetLatestHeightResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
@@ -235,8 +235,8 @@ var _BlockService_serviceDesc = grpc.ServiceDesc{
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "GetLatestBlockID",
-			Handler:       _BlockService_GetLatestBlockID_Handler,
+			StreamName:    "GetLatestHeight",
+			Handler:       _BlockService_GetLatestHeight_Handler,
 			ServerStreams: true,
 		},
 	},

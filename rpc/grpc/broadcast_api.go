@@ -8,7 +8,15 @@ import (
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 )
 
-type broadcastAPI struct {
+// Deprecated.
+type broadcastAPI struct{}
+
+// NewBroadcastAPIServer creates a new gRPC BroadcastAPIServer.
+//
+// NOTE: This specific API is currently scheduled for deprecation in a future
+// release of CometBFT.
+func NewBroadcastAPIServer() BroadcastAPIServer {
+	return &broadcastAPI{}
 }
 
 func (bapi *broadcastAPI) Ping(ctx context.Context, req *RequestPing) (*ResponsePing, error) {

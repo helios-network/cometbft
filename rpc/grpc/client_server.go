@@ -9,14 +9,11 @@ import (
 	cmtnet "github.com/tendermint/tendermint/libs/net"
 )
 
-// Config is an gRPC server configuration.
-type Config struct {
-	MaxOpenConnections int
-}
-
-// StartGRPCServer starts a new gRPC BroadcastAPIServer using the given
-// net.Listener.
+// StartGRPCServer starts a new gRPC server using the given net.Listener.
+//
 // NOTE: This function blocks - you may want to call it in a go-routine.
+//
+// Deprecated. Please use ServerBuilder instead.
 func StartGRPCServer(ln net.Listener) error {
 	grpcServer := grpc.NewServer()
 	RegisterBroadcastAPIServer(grpcServer, &broadcastAPI{})
@@ -25,6 +22,8 @@ func StartGRPCServer(ln net.Listener) error {
 
 // StartGRPCClient dials the gRPC server using protoAddr and returns a new
 // BroadcastAPIClient.
+//
+// Deprecated.
 func StartGRPCClient(protoAddr string) BroadcastAPIClient {
 	//nolint:staticcheck // SA1019 Existing use of deprecated but supported dial option.
 	conn, err := grpc.Dial(protoAddr, grpc.WithInsecure(), grpc.WithContextDialer(dialerFunc))

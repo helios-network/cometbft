@@ -37,7 +37,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
 	rpccore "github.com/tendermint/tendermint/rpc/core"
-	grpccore "github.com/tendermint/tendermint/rpc/grpc"
+	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	rpcserver "github.com/tendermint/tendermint/rpc/jsonrpc/server"
 	sm "github.com/tendermint/tendermint/state"
 	"github.com/tendermint/tendermint/state/indexer"
@@ -1205,7 +1205,26 @@ func (n *Node) startRPC() ([]net.Listener, error) {
 			return nil, err
 		}
 		go func() {
-			if err := grpccore.StartGRPCServer(listener); err != nil {
+			broadcastAPI := coregrpc.NewBroadcastAPIServer()
+			blockService, err := coregrpc.NewBlockServiceServer(&coregrpc.BlockServiceServerConfig{
+				StateStore: n.stateStore,
+				BlockStore: n.blockStore,
+				EventBus:   n.eventBus,
+				Log:        n.Logger,
+			})
+			if err != nil {
+				n.Logger.Error("Error creating gRPC server: failed to construct BlockServiceServer", "err", err)
+				return
+			}
+			server, err := coregrpc.NewServerBuilder().
+				SetBroadcastAPIServer(broadcastAPI).
+				SetBlockService(blockService).
+				Build()
+			if err != nil {
+				n.Logger.Error("Error creating gRPC server", "err", err)
+				return
+			}
+			if err := server.Serve(listener); err != nil {
 				n.Logger.Error("Error starting gRPC server", "err", err)
 			}
 		}()

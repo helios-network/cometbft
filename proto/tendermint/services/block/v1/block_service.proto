@@ -7,9 +7,9 @@ import "tendermint/services/block/v1/block.proto";
 
 // BlockService provides information about blocks.
 service BlockService {
-    // GetLatestBlockID returns a stream of the latest block IDs as they are
-    // committed by the network.
-    rpc GetLatestBlockID(GetLatestBlockIDRequest) returns (stream GetLatestBlockIDResponse) {}
+    // GetLatestHeight returns a stream of the latest block heights as blocks
+    // are committed at those heights.
+    rpc GetLatestHeight(GetLatestHeightRequest) returns (stream GetLatestHeightResponse) {}
 
     // GetBlock attempts to retrieve the block at a particular height,
     // including all of its transactions.
