@@ -9,7 +9,7 @@ import (
 	"github.com/cometbft/cometbft/abci/types"
 	cryptoencoding "github.com/cometbft/cometbft/crypto/encoding"
 	cmtrand "github.com/cometbft/cometbft/libs/rand"
-	"github.com/cometbft/cometbft/proto/cometbft/crypto/v1"
+	pbcrypto "github.com/cometbft/cometbft/proto/cometbft/crypto/v1"
 )
 
 // RandVal creates one random validator, with a key derived
@@ -69,7 +69,7 @@ func NewTxFromID(i int) []byte {
 
 // Create a transaction to add/remove/update a validator
 // To remove, set power to 0.
-func MakeValSetChangeTx(pubkey crypto.PublicKey, power int64) []byte {
+func MakeValSetChangeTx(pubkey pbcrypto.PublicKey, power int64) []byte {
 	pk, err := cryptoencoding.PubKeyFromProto(pubkey)
 	if err != nil {
 		panic(err)
