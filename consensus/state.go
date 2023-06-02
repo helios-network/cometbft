@@ -1388,16 +1388,19 @@ func (cs *State) defaultDoPrevote(height int64, round int32) {
 
 	// Vote nil if the Application rejected the block
 	if !isAppValid {
+		logger.Error("❌ isAppValid is false but not going to prevote nil")
 		logger.Error("prevote step: state machine rejected a proposed block; this should not happen:"+
 			"the proposer may be misbehaving; prevoting nil", "err", err)
-		cs.signAddVote(cmtproto.PrevoteType, nil, types.PartSetHeader{}, nil)
-		return
+		//cs.signAddVote(cmtproto.PrevoteType, nil, types.PartSetHeader{}, nil)
+		//return
 	}
 
 	// Prevote cs.ProposalBlock
 	// NOTE: the proposal signature is validated when it is received,
 	// and the proposal block parts are validated as they are received (against the merkle hash in the proposal)
-	logger.Debug("prevote step: ProposalBlock is valid")
+	if isAppValid {
+		logger.Debug("prevote step: ProposalBlock is valid")
+	}
 	cs.signAddVote(cmtproto.PrevoteType, cs.ProposalBlock.Hash(), cs.ProposalBlockParts.Header(), nil)
 }
 
