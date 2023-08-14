@@ -609,10 +609,19 @@ func ExecCommitBlock(
 	store Store,
 	initialHeight int64,
 ) ([]byte, error) {
-	_, err := execBlockOnProxyApp(logger, appConnConsensus, block, store, initialHeight)
+	resp, err := execBlockOnProxyApp(logger, appConnConsensus, block, store, initialHeight)
 	if err != nil {
 		logger.Error("failed executing block on proxy app", "height", block.Height, "err", err)
 		return nil, err
+	}
+
+	gasUsedCorrect := []int64{119632, 92889, 270294, 116187, 857118, 202473, 724340, 401098, 77520}
+	for _, r := range resp.DeliverTxs {
+		if r.GasUsed != gasUsedCorrect[0] {
+			fmt.Println(r)
+			panic("INCORRECT GAS USED!")
+		}
+		gasUsedCorrect = gasUsedCorrect[1:]
 	}
 
 	// Commit block, get hash back

@@ -265,10 +265,22 @@ func (h *Handshaker) Handshake(proxyApp proxy.AppConns) error {
 	}
 
 	// Replay blocks up to the latest in the blockstore.
+	//for {
 	_, err = h.ReplayBlocks(h.initialState, appHash, blockHeight, proxyApp)
 	if err != nil {
 		return fmt.Errorf("error on replay: %v", err)
 	}
+	//}
+
+	go func() {
+		time.Sleep(5 * time.Second)
+		for {
+			_, err = h.ReplayBlocks(h.initialState, appHash, blockHeight, proxyApp)
+			if err != nil {
+				panic(fmt.Sprintf("error on replay: %v", err))
+			}
+		}
+	}()
 
 	h.logger.Info("Completed ABCI Handshake - CometBFT and App are synced",
 		"appHeight", blockHeight, "appHash", appHash)
