@@ -2,11 +2,13 @@ package consensus
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"runtime/debug"
+	"runtime/pprof"
 	"sort"
 	"time"
 
@@ -1699,15 +1701,17 @@ func (cs *State) finalizeCommit(height int64) {
 		err          error
 		retainHeight int64
 	)
+	pprof.Do(context.Background(), pprof.Labels(fmt.Sprintf("height-%d", block.Height)), func(_ context.Context) {
+		stateCopy, retainHeight, err = cs.blockExec.ApplyBlock(
+			stateCopy,
+			types.BlockID{
+				Hash:          block.Hash(),
+				PartSetHeader: blockParts.Header(),
+			},
+			block,
+		)
+	})
 
-	stateCopy, retainHeight, err = cs.blockExec.ApplyBlock(
-		stateCopy,
-		types.BlockID{
-			Hash:          block.Hash(),
-			PartSetHeader: blockParts.Header(),
-		},
-		block,
-	)
 	if err != nil {
 		panic(fmt.Sprintf("failed to apply block; error %v", err))
 	}
