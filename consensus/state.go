@@ -1701,7 +1701,7 @@ func (cs *State) finalizeCommit(height int64) {
 		err          error
 		retainHeight int64
 	)
-	pprof.Do(context.Background(), pprof.Labels(fmt.Sprintf("height-%d", block.Height)), func(_ context.Context) {
+	pprof.Do(context.Background(), pprof.Labels("height", fmt.Sprintf("%d", block.Height)), func(_ context.Context) {
 		stateCopy, retainHeight, err = cs.blockExec.ApplyBlock(
 			stateCopy,
 			types.BlockID{
