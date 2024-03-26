@@ -12,6 +12,8 @@ import (
 	"sort"
 	"time"
 
+	"golang.org/x/exp/trace"
+
 	"github.com/cosmos/gogoproto/proto"
 
 	cfg "github.com/cometbft/cometbft/config"
@@ -142,6 +144,8 @@ type State struct {
 
 	// for reporting metrics
 	metrics *Metrics
+
+	traceRecorder *trace.FlightRecorder
 }
 
 // StateOption sets an optional parameter on the State.
@@ -383,6 +387,16 @@ func (cs *State) OnStart() error {
 	// schedule the first round!
 	// use GetRoundState so we don't race the receiveRoutine for access
 	cs.scheduleRound0(cs.GetRoundState())
+
+	// start continuous tracing
+	cs.traceRecorder = trace.NewFlightRecorder()
+	cs.traceRecorder.SetPeriod(time.Minute)
+	cs.traceRecorder.SetSize(1024 * 1024 * 1024 * 4)
+	if err := cs.traceRecorder.Start(); err != nil {
+		cs.Logger.Error("can't start tracing flight recorder")
+	} else {
+		cs.Logger.Info("tracing flight recorder started")
+	}
 
 	return nil
 }
@@ -1702,6 +1716,7 @@ func (cs *State) finalizeCommit(height int64) {
 		retainHeight int64
 	)
 	pprof.Do(context.Background(), pprof.Labels("height", fmt.Sprintf("%d", block.Height)), func(_ context.Context) {
+		start := time.Now()
 		stateCopy, retainHeight, err = cs.blockExec.ApplyBlock(
 			stateCopy,
 			types.BlockID{
@@ -1710,6 +1725,19 @@ func (cs *State) finalizeCommit(height int64) {
 			},
 			block,
 		)
+		if time.Since(start) > time.Second*5 {
+			var b bytes.Buffer
+			_, err = cs.traceRecorder.WriteTo(&b)
+			if err != nil {
+				logger.Error("can't write FlightRecorder trace to buffer", "err", err)
+				return
+			}
+			// Write it to a file.
+			if err := os.WriteFile(fmt.Sprintf("trace-%d.out", block.Height), b.Bytes(), 0o755); err != nil {
+				logger.Error("can't write FlightRecorder trace to file", "err", err)
+				return
+			}
+		}
 	})
 
 	if err != nil {
