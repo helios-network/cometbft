@@ -1717,8 +1717,8 @@ func (cs *State) finalizeCommit(height int64) {
 		err          error
 		retainHeight int64
 	)
+	start := time.Now()
 	pprof.Do(context.Background(), pprof.Labels("height", fmt.Sprintf("%d", block.Height)), func(_ context.Context) {
-		start := time.Now()
 		_, task := rtrace.NewTask(context.Background(), fmt.Sprintf("height-%d", block.Height))
 		defer task.End()
 
@@ -1730,22 +1730,22 @@ func (cs *State) finalizeCommit(height int64) {
 			},
 			block,
 		)
-		if time.Since(start) > time.Second*5 {
-			var b bytes.Buffer
-			_, err = cs.traceRecorder.WriteTo(&b)
-			if err != nil {
-				logger.Error("can't write FlightRecorder trace to buffer", "err", err)
-				return
-			}
-			// Write it to a file.
-			if err := os.WriteFile(fmt.Sprintf("trace-%d.out", block.Height), b.Bytes(), 0o755); err != nil {
-				logger.Error("can't write FlightRecorder trace to file", "err", err)
-				return
-			}
-
-			logger.Info("tracing: saved trace for slow block", "height", block.Height)
-		}
 	})
+	if time.Since(start) > time.Second*5 {
+		var b bytes.Buffer
+		_, err = cs.traceRecorder.WriteTo(&b)
+		if err != nil {
+			logger.Error("can't write FlightRecorder trace to buffer", "err", err)
+			return
+		}
+		// Write it to a file.
+		if err := os.WriteFile(fmt.Sprintf("trace-%d.out", block.Height), b.Bytes(), 0o755); err != nil {
+			logger.Error("can't write FlightRecorder trace to file", "err", err)
+			return
+		}
+
+		logger.Info("tracing: saved trace for slow block", "height", block.Height)
+	}
 
 	if err != nil {
 		panic(fmt.Sprintf("failed to apply block; error %v", err))
