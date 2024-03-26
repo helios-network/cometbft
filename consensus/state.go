@@ -12,6 +12,8 @@ import (
 	"sort"
 	"time"
 
+	rtrace "runtime/trace"
+
 	"golang.org/x/exp/trace"
 
 	"github.com/cosmos/gogoproto/proto"
@@ -1717,6 +1719,9 @@ func (cs *State) finalizeCommit(height int64) {
 	)
 	pprof.Do(context.Background(), pprof.Labels("height", fmt.Sprintf("%d", block.Height)), func(_ context.Context) {
 		start := time.Now()
+		_, task := rtrace.NewTask(context.Background(), fmt.Sprintf("height-%d", block.Height))
+		defer task.End()
+
 		stateCopy, retainHeight, err = cs.blockExec.ApplyBlock(
 			stateCopy,
 			types.BlockID{
@@ -1737,6 +1742,8 @@ func (cs *State) finalizeCommit(height int64) {
 				logger.Error("can't write FlightRecorder trace to file", "err", err)
 				return
 			}
+
+			logger.Info("tracing: saved trace for slow block", "height", block.Height)
 		}
 	})
 
