@@ -106,6 +106,9 @@ type Manifest struct {
 	// Maximum number of peers to which the node gossips transactions
 	ExperimentalMaxGossipConnectionsToPersistentPeers    uint `toml:"experimental_max_gossip_connections_to_persistent_peers"`
 	ExperimentalMaxGossipConnectionsToNonPersistentPeers uint `toml:"experimental_max_gossip_connections_to_non_persistent_peers"`
+
+	// Upper bound of sleep duration then gossipping votes and block parts
+	PeerGossipIntraloopSleepDuration time.Duration `toml:"peer_gossip_intraloop_sleep_duration"`
 }
 
 // ManifestNode represents a node in a testnet manifest.
@@ -168,6 +171,10 @@ type ManifestNode struct {
 	// 0, which retains all blocks. Must be greater that PersistInterval,
 	// SnapshotInterval and EvidenceAgeHeight.
 	RetainBlocks uint64 `toml:"retain_blocks"`
+
+	// EnableCompanionPruning specifies whether or not storage pruning on the
+	// node should take a data companion into account.
+	EnableCompanionPruning bool `toml:"enable_companion_pruning"`
 
 	// Perturb lists perturbations to apply to the node after it has been
 	// started and synced with the network:

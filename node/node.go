@@ -3,6 +3,7 @@ package node
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -28,6 +29,8 @@ import (
 	"github.com/cometbft/cometbft/proxy"
 	rpccore "github.com/cometbft/cometbft/rpc/core"
 	grpccore "github.com/cometbft/cometbft/rpc/grpc"
+	grpcserver "github.com/cometbft/cometbft/rpc/grpc/server"
+	grpcprivserver "github.com/cometbft/cometbft/rpc/grpc/server/privileged"
 	rpcserver "github.com/cometbft/cometbft/rpc/jsonrpc/server"
 	sm "github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/state/indexer"
@@ -64,8 +67,9 @@ type Node struct {
 	eventBus          *types.EventBus // pub/sub for services
 	stateStore        sm.Store
 	blockStore        *store.BlockStore // store the blockchain to disk
-	bcReactor         p2p.Reactor       // for block-syncing
-	mempoolReactor    p2p.Reactor       // for gossipping transactions
+	pruner            *sm.Pruner
+	bcReactor         p2p.Reactor // for block-syncing
+	mempoolReactor    p2p.Reactor // for gossipping transactions
 	mempool           mempl.Mempool
 	stateSync         bool                    // whether the node should state sync on startup
 	stateSyncReactor  *statesync.Reactor      // for hosting and restoring state sync snapshots
@@ -383,6 +387,19 @@ func NewNodeWithContext(ctx context.Context,
 		return nil, err
 	}
 
+	pruner, err := createPruner(
+		config,
+		txIndexer,
+		blockIndexer,
+		stateStore,
+		blockStore,
+		smMetrics,
+		logger.With("module", "state"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pruner: %w", err)
+	}
+
 	// make block executor for consensus and blocksync reactors to execute blocks
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
@@ -391,6 +408,7 @@ func NewNodeWithContext(ctx context.Context,
 		mempool,
 		evidencePool,
 		blockStore,
+		sm.BlockExecutorWithPruner(pruner),
 		sm.BlockExecutorWithMetrics(smMetrics),
 	)
 
@@ -489,6 +507,7 @@ func NewNodeWithContext(ctx context.Context,
 
 		stateStore:       stateStore,
 		blockStore:       blockStore,
+		pruner:           pruner,
 		bcReactor:        bcReactor,
 		mempoolReactor:   mempoolReactor,
 		mempool:          mempool,
@@ -579,6 +598,11 @@ func (n *Node) OnStart() error {
 		}
 	}
 
+	// Start background pruning
+	if err := n.pruner.Start(); err != nil {
+		return fmt.Errorf("failed to start background pruning routine: %w", err)
+	}
+
 	return nil
 }
 
@@ -589,6 +613,9 @@ func (n *Node) OnStop() {
 	n.Logger.Info("Stopping Node")
 
 	// first stop the non-reactor services
+	if err := n.pruner.Stop(); err != nil {
+		n.Logger.Error("Error stopping the pruning service", "err", err)
+	}
 	if err := n.eventBus.Stop(); err != nil {
 		n.Logger.Error("Error closing eventBus", "err", err)
 	}
@@ -806,6 +833,50 @@ func (n *Node) startRPC() ([]net.Listener, error) {
 
 	}
 
+	if n.config.GRPC.ListenAddress != "" {
+		listener, err := grpcserver.Listen(n.config.GRPC.ListenAddress)
+		if err != nil {
+			return nil, err
+		}
+		opts := []grpcserver.Option{
+			grpcserver.WithLogger(n.Logger),
+		}
+		if n.config.GRPC.VersionService.Enabled {
+			opts = append(opts, grpcserver.WithVersionService())
+		}
+		if n.config.GRPC.BlockService.Enabled {
+			opts = append(opts, grpcserver.WithBlockService(n.blockStore, n.eventBus, n.Logger))
+		}
+		if n.config.GRPC.BlockResultsService.Enabled {
+			opts = append(opts, grpcserver.WithBlockResultsService(n.blockStore, n.stateStore, n.Logger))
+		}
+		go func() {
+			if err := grpcserver.Serve(listener, opts...); err != nil {
+				n.Logger.Error("Error starting gRPC server", "err", err)
+			}
+		}()
+		listeners = append(listeners, listener)
+	}
+
+	if n.config.GRPC.Privileged.ListenAddress != "" {
+		listener, err := grpcserver.Listen(n.config.GRPC.Privileged.ListenAddress)
+		if err != nil {
+			return nil, err
+		}
+		opts := []grpcprivserver.Option{
+			grpcprivserver.WithLogger(n.Logger),
+		}
+		if n.config.GRPC.Privileged.PruningService.Enabled {
+			opts = append(opts, grpcprivserver.WithPruningService(n.pruner, n.Logger))
+		}
+		go func() {
+			if err := grpcprivserver.Serve(listener, opts...); err != nil {
+				n.Logger.Error("Error starting privileged gRPC server", "err", err)
+			}
+		}()
+		listeners = append(listeners, listener)
+	}
+
 	return listeners, nil
 }
 
@@ -974,4 +1045,76 @@ func makeNodeInfo(
 
 	err := nodeInfo.Validate()
 	return nodeInfo, err
+}
+
+func createPruner(
+	config *cfg.Config,
+	txIndexer txindex.TxIndexer,
+	blockIndexer indexer.BlockIndexer,
+	stateStore sm.Store,
+	blockStore *store.BlockStore,
+	metrics *sm.Metrics,
+	logger log.Logger,
+) (*sm.Pruner, error) {
+	if err := initApplicationRetainHeight(stateStore); err != nil {
+		return nil, err
+	}
+
+	prunerOpts := []sm.PrunerOption{
+		sm.WithPrunerInterval(config.Storage.Pruning.Interval),
+		sm.WithPrunerMetrics(metrics),
+	}
+
+	if config.Storage.Pruning.DataCompanion.Enabled {
+		err := initCompanionRetainHeights(
+			stateStore,
+			config.Storage.Pruning.DataCompanion.InitialBlockRetainHeight,
+			config.Storage.Pruning.DataCompanion.InitialBlockResultsRetainHeight,
+		)
+		if err != nil {
+			return nil, err
+		}
+		prunerOpts = append(prunerOpts, sm.WithPrunerCompanionEnabled())
+	}
+
+	return sm.NewPruner(stateStore, blockStore, blockIndexer, txIndexer, logger, prunerOpts...), nil
+}
+
+// Set the initial application retain height to 0 to avoid the data companion
+// pruning blocks before the application indicates it is OK. We set this to 0
+// only if the retain height was not set before by the application.
+func initApplicationRetainHeight(stateStore sm.Store) error {
+	if _, err := stateStore.GetApplicationRetainHeight(); err != nil {
+		if errors.Is(err, sm.ErrKeyNotFound) {
+			return stateStore.SaveApplicationRetainHeight(0)
+		}
+		return err
+	}
+	return nil
+}
+
+// Sets the data companion retain heights if one of two possible conditions is
+// met:
+// 1. One or more of the retain heights has not yet been set.
+// 2. One or more of the retain heights is currently 0.
+func initCompanionRetainHeights(stateStore sm.Store, initBlockRH, initBlockResultsRH int64) error {
+	curBlockRH, err := stateStore.GetCompanionBlockRetainHeight()
+	if err != nil && !errors.Is(err, sm.ErrKeyNotFound) {
+		return fmt.Errorf("failed to obtain companion block retain height: %w", err)
+	}
+	if curBlockRH == 0 {
+		if err := stateStore.SaveCompanionBlockRetainHeight(initBlockRH); err != nil {
+			return fmt.Errorf("failed to set initial data companion block retain height: %w", err)
+		}
+	}
+	curBlockResultsRH, err := stateStore.GetABCIResRetainHeight()
+	if err != nil && !errors.Is(err, sm.ErrKeyNotFound) {
+		return fmt.Errorf("failed to obtain companion block results retain height: %w", err)
+	}
+	if curBlockResultsRH == 0 {
+		if err := stateStore.SaveABCIResRetainHeight(initBlockResultsRH); err != nil {
+			return fmt.Errorf("failed to set initial data companion block results retain height: %w", err)
+		}
+	}
+	return nil
 }
