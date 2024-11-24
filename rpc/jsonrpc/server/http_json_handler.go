@@ -251,6 +251,9 @@ func writeListOfEndpoints(w http.ResponseWriter, r *http.Request, funcMap map[st
 		}
 		buf.WriteString(fmt.Sprintf("<a href=\"%s\">%s</a></br>", link, link))
 	}
+	// genesis-raw raw genesisfile
+	buf.WriteString("<br>Endpoints that share genesis.json of the current node:<br>")
+	buf.WriteString(fmt.Sprintf("<a href=\"%s\">%s</a></br>", fmt.Sprintf("//%s/%s", r.Host, "genesis-raw"), fmt.Sprintf("//%s/%s", r.Host, "genesis-raw")))
 	buf.WriteString("</body></html>")
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(200)
