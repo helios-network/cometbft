@@ -690,7 +690,7 @@ func (n *Node) ConfigureRPC() (*rpccore.Environment, error) {
 }
 
 func RegisterRawGenesisRoute(mux *http.ServeMux, configDir string) {
-	genesisPath := filepath.Join(configDir, "genesis.json")
+	genesisPath := filepath.Join(configDir, "config/genesis.json")
 
 	mux.HandleFunc("/genesis-raw", func(w http.ResponseWriter, r *http.Request) {
 		// Lire le contenu du fichier genesis.json
