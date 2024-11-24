@@ -23,6 +23,10 @@ type ResultGenesis struct {
 	Genesis *types.GenesisDoc `json:"genesis"`
 }
 
+type ResultGenesisRaw struct {
+	Raw string `json:"raw"` // Contient le contenu brut du genesis
+}
+
 // ResultGenesisChunk is the output format for the chunked/paginated
 // interface. These chunks are produced by converting the genesis
 // document to JSON and then splitting the resulting payload into
