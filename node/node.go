@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -688,6 +689,23 @@ func (n *Node) ConfigureRPC() (*rpccore.Environment, error) {
 	return &rpcCoreEnv, nil
 }
 
+func RegisterRawGenesisRoute(mux *http.ServeMux, configDir string) {
+	genesisPath := filepath.Join(configDir, "genesis.json")
+
+	mux.HandleFunc("/genesis-raw", func(w http.ResponseWriter, r *http.Request) {
+		// Lire le contenu du fichier genesis.json
+		content, err := os.ReadFile(genesisPath)
+		if err != nil {
+			http.Error(w, "Failed to load genesis file", http.StatusInternalServerError)
+			return
+		}
+		// Retourner le contenu brut
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(content)
+	})
+}
+
 func (n *Node) startRPC() ([]net.Listener, error) {
 	env, err := n.ConfigureRPC()
 	if err != nil {
@@ -719,6 +737,7 @@ func (n *Node) startRPC() ([]net.Listener, error) {
 		mux := http.NewServeMux()
 		rpcLogger := n.Logger.With("module", "rpc-server")
 		wmLogger := rpcLogger.With("protocol", "websocket")
+		RegisterRawGenesisRoute(mux, n.config.RootDir)
 		wm := rpcserver.NewWebsocketManager(routes,
 			rpcserver.OnDisconnect(func(remoteAddr string) {
 				err := n.eventBus.UnsubscribeAll(context.Background(), remoteAddr)
