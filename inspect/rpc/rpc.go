@@ -3,6 +3,8 @@ package rpc
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/rs/cors"
@@ -63,6 +65,7 @@ func Handler(rpcConfig *config.RPCConfig, routes core.RoutesMap, logger log.Logg
 	mux.HandleFunc("/websocket", wm.WebsocketHandler)
 
 	server.RegisterRPCFuncs(mux, routes, logger)
+	RegisterRawGenesisRoute(mux, rpcConfig.RootDir)
 	var rootHandler http.Handler = mux
 	if rpcConfig.IsCorsEnabled() {
 		rootHandler = addCORSHandler(rpcConfig, mux)
@@ -84,6 +87,23 @@ type waitSyncCheckerImpl struct{}
 
 func (waitSyncCheckerImpl) WaitSync() bool {
 	return false
+}
+
+func RegisterRawGenesisRoute(mux *http.ServeMux, configDir string) {
+	genesisPath := filepath.Join(configDir, "genesis.json")
+
+	mux.HandleFunc("/genesis-raw", func(w http.ResponseWriter, r *http.Request) {
+		// Lire le contenu du fichier genesis.json
+		content, err := os.ReadFile(genesisPath)
+		if err != nil {
+			http.Error(w, "Failed to load genesis file", http.StatusInternalServerError)
+			return
+		}
+		// Retourner le contenu brut
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(content)
+	})
 }
 
 // ListenAndServe listens on the address specified in srv.Addr and handles any
