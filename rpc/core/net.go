@@ -3,6 +3,8 @@ package core
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/cometbft/cometbft/p2p"
@@ -102,6 +104,20 @@ func (env *Environment) Genesis(*rpctypes.Context) (*ctypes.ResultGenesis, error
 	}
 
 	return &ctypes.ResultGenesis{Genesis: env.GenDoc}, nil
+}
+
+func (env *Environment) GenesisRaw(ctx *rpctypes.Context) ([]byte, error) {
+	// Définir le chemin du fichier genesis.json
+	genesisPath := filepath.Join(env.Config.RootDir, "config", "genesis.json")
+
+	// Lire le contenu brut du fichier genesis.json
+	content, err := os.ReadFile(genesisPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Retourner le contenu sous forme brute (JSON brut)
+	return content, nil
 }
 
 func (env *Environment) GenesisChunked(_ *rpctypes.Context, chunk uint) (*ctypes.ResultGenesisChunk, error) {
