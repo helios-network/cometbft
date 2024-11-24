@@ -696,7 +696,7 @@ func RegisterRawGenesisRoute(mux *http.ServeMux, configDir string) {
 		// Lire le contenu du fichier genesis.json
 		content, err := os.ReadFile(genesisPath)
 		if err != nil {
-			http.Error(w, "Failed to load genesis file", http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("Failed to load genesis file path %s", genesisPath), http.StatusInternalServerError)
 			return
 		}
 		// Retourner le contenu brut
