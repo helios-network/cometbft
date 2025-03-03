@@ -8,7 +8,6 @@ import (
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	"github.com/cometbft/cometbft/types"
-	"github.com/ethereum/go-ethereum/common"
 )
 
 // Status returns CometBFT status including node info, pubkey, latest block
@@ -66,10 +65,10 @@ func (env *Environment) Status(*rpctypes.Context) (*ctypes.ResultStatus, error) 
 			CatchingUp:          env.ConsensusReactor.WaitSync(),
 		},
 		ValidatorInfo: ctypes.ValidatorInfo{
-			// Address:     env.PubKey.Address(),
-			Address:     common.BytesToAddress(env.PubKey.Bytes()).String(),
-			PubKey:      env.PubKey,
-			VotingPower: votingPower,
+			Address:                 env.PubKey.Address(),
+			PubKey:                  env.PubKey,
+			VotingPower:             votingPower,
+			LatestUncommittedHeight: env.latestUncommittedHeight(),
 		},
 	}
 

@@ -92,9 +92,10 @@ type SyncInfo struct {
 
 // Info about the node's validator
 type ValidatorInfo struct {
-	Address     string        `json:"address"`
-	PubKey      crypto.PubKey `json:"pub_key"`
-	VotingPower int64         `json:"voting_power"`
+	Address                 bytes.HexBytes `json:"address"`
+	PubKey                  crypto.PubKey  `json:"pub_key"`
+	VotingPower             int64          `json:"voting_power"`
+	LatestUncommittedHeight int64          `json:"latest_uncommitted_height"`
 }
 
 // Node Status
