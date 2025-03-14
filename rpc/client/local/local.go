@@ -148,6 +148,10 @@ func (c *Local) BlockchainInfo(_ context.Context, minHeight, maxHeight int64) (*
 	return c.env.BlockchainInfo(c.ctx, minHeight, maxHeight)
 }
 
+func (c *Local) BlockchainLocateTxsInfo(_ context.Context, minHeight, maxHeight int64, hexAddressString string, accAddressString string) (*ctypes.ResultBlockchainInfo, error) {
+	return c.env.BlockchainLocateTxsInfo(c.ctx, minHeight, maxHeight, hexAddressString, accAddressString)
+}
+
 func (c *Local) Genesis(context.Context) (*ctypes.ResultGenesis, error) {
 	return c.env.Genesis(c.ctx)
 }

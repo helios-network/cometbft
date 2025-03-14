@@ -20,7 +20,7 @@ import (
 // returned. If minHeight does not exist (due to pruning), earliest existing
 // height will be used.
 //
-// At most 20 items will be returned. Block headers are returned in descending
+// At most 100 items will be returned. Block headers are returned in descending
 // order (highest first).
 //
 // More: https://docs.cometbft.com/v0.38.x/rpc/#/Info/blockchain
@@ -28,7 +28,7 @@ func (env *Environment) BlockchainInfo(
 	_ *rpctypes.Context,
 	minHeight, maxHeight int64,
 ) (*ctypes.ResultBlockchainInfo, error) {
-	const limit int64 = 20
+	const limit int64 = 100
 	var err error
 	minHeight, maxHeight, err = filterMinMax(
 		env.BlockStore.Base(),
@@ -39,12 +39,88 @@ func (env *Environment) BlockchainInfo(
 	if err != nil {
 		return nil, err
 	}
-	env.Logger.Debug("BlockchainInfoHandler", "maxHeight", maxHeight, "minHeight", minHeight)
 
 	blockMetas := []*types.BlockMeta{}
 	for height := maxHeight; height >= minHeight; height-- {
 		blockMeta := env.BlockStore.LoadBlockMeta(height)
 		blockMetas = append(blockMetas, blockMeta)
+	}
+
+	return &ctypes.ResultBlockchainInfo{
+		LastHeight: env.BlockStore.Height(),
+		BlockMetas: blockMetas,
+	}, nil
+}
+
+// BlockchainLocateTxInfo gets block headers for minHeight <= height <= maxHeight
+// where hexAddressString or accAddressString exists in:
+//
+//   - TxResults.event.Type["message"]["sender"]
+//   - TxResults.event.Type["message"]["recipient"]
+//   - TxResults.event.Type["ethereum_tx"]["sender"]
+//   - TxResults.event.Type["ethereum_tx"]["recipient"]
+//
+// If maxHeight does not yet exist, blocks up to the current height will be
+// returned. If minHeight does not exist (due to pruning), earliest existing
+// height will be used.
+//
+// At most 1000 items will be returned. Block headers are returned in descending
+// order (highest first).
+//
+// # Returned BlockMeta.NumTxs contains the number of tx found in Block
+//
+// More: https://docs.cometbft.com/v0.38.x/rpc/#/Info/blockchain_locate_tx
+func (env *Environment) BlockchainLocateTxsInfo(
+	_ *rpctypes.Context,
+	minHeight, maxHeight int64,
+	senderHexString string,
+	senderAccString string,
+) (*ctypes.ResultBlockchainInfo, error) {
+	const limit int64 = 1000
+	var err error
+	minHeight, maxHeight, err = filterMinMax(
+		env.BlockStore.Base(),
+		env.BlockStore.Height(),
+		minHeight,
+		maxHeight,
+		limit)
+	if err != nil {
+		return nil, err
+	}
+
+	blockMetas := []*types.BlockMeta{}
+	for height := maxHeight; height >= minHeight; height-- {
+		blockMeta := env.BlockStore.LoadBlockMeta(height)
+		if blockMeta.NumTxs > 0 {
+			results, err := env.StateStore.LoadFinalizeBlockResponse(height)
+			if err != nil {
+				env.Logger.Error("failed to LoadFinalizeBlockResponse", "err", err)
+				return nil, err
+			}
+			found := 0
+			for _, txResult := range results.TxResults {
+				for _, event := range txResult.Events {
+					if event.Type == "message" || event.Type == "ethereum_tx" {
+						for _, attr := range event.Attributes {
+							if string(attr.Key) == "sender" || string(attr.Key) == "recipient" {
+								if string(attr.Value) == senderAccString || string(attr.Value) == senderHexString {
+									found += 1
+									break
+								}
+							}
+						}
+					}
+				}
+			}
+			if found > 0 {
+				blockMetas = append(blockMetas, &types.BlockMeta{
+					BlockID:   blockMeta.BlockID,
+					BlockSize: blockMeta.BlockSize,
+					Header:    blockMeta.Header,
+					NumTxs:    found, // set number of found
+				})
+			}
+		}
 	}
 
 	return &ctypes.ResultBlockchainInfo{

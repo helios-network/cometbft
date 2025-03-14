@@ -98,6 +98,7 @@ type HistoryClient interface {
 	Genesis(context.Context) (*ctypes.ResultGenesis, error)
 	GenesisChunked(context.Context, uint) (*ctypes.ResultGenesisChunk, error)
 	BlockchainInfo(ctx context.Context, minHeight, maxHeight int64) (*ctypes.ResultBlockchainInfo, error)
+	BlockchainLocateTxsInfo(ctx context.Context, minHeight, maxHeight int64, hexAddressString string, accAddressString string) (*ctypes.ResultBlockchainInfo, error)
 }
 
 // StatusClient provides access to general chain info.

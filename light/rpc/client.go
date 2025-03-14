@@ -299,6 +299,45 @@ func (c *Client) BlockchainInfo(ctx context.Context, minHeight, maxHeight int64)
 	return res, nil
 }
 
+func (c *Client) BlockchainLocateTxsInfo(ctx context.Context, minHeight, maxHeight int64, hexAddressString string, accAddressString string) (*ctypes.ResultBlockchainInfo, error) {
+	res, err := c.next.BlockchainLocateTxsInfo(ctx, minHeight, maxHeight, hexAddressString, accAddressString)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate res.
+	for i, meta := range res.BlockMetas {
+		if meta == nil {
+			return nil, fmt.Errorf("nil block meta %d", i)
+		}
+		if err := meta.ValidateBasic(); err != nil {
+			return nil, fmt.Errorf("invalid block meta %d: %w", i, err)
+		}
+	}
+
+	// Update the light client if we're behind.
+	if len(res.BlockMetas) > 0 {
+		lastHeight := res.BlockMetas[len(res.BlockMetas)-1].Header.Height
+		if _, err := c.updateLightClientIfNeededTo(ctx, &lastHeight); err != nil {
+			return nil, err
+		}
+	}
+
+	// Verify each of the BlockMetas.
+	for _, meta := range res.BlockMetas {
+		h, err := c.lc.TrustedLightBlock(meta.Header.Height)
+		if err != nil {
+			return nil, fmt.Errorf("trusted header %d: %w", meta.Header.Height, err)
+		}
+		if bmH, tH := meta.Header.Hash(), h.Hash(); !bytes.Equal(bmH, tH) {
+			return nil, fmt.Errorf("block meta header %X does not match with trusted header %X",
+				bmH, tH)
+		}
+	}
+
+	return res, nil
+}
+
 func (c *Client) Genesis(ctx context.Context) (*ctypes.ResultGenesis, error) {
 	return c.next.Genesis(ctx)
 }

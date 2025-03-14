@@ -36,18 +36,19 @@ func Routes(cfg config.RPCConfig, s state.Store, bs state.BlockStore, txidx txin
 		Logger:           logger,
 	}
 	return core.RoutesMap{
-		"blockchain":       server.NewRPCFunc(env.BlockchainInfo, "minHeight,maxHeight"),
-		"consensus_params": server.NewRPCFunc(env.ConsensusParams, "height"),
-		"block":            server.NewRPCFunc(env.Block, "height"),
-		"block_by_hash":    server.NewRPCFunc(env.BlockByHash, "hash"),
-		"block_results":    server.NewRPCFunc(env.BlockResults, "height"),
-		"commit":           server.NewRPCFunc(env.Commit, "height"),
-		"header":           server.NewRPCFunc(env.Header, "height"),
-		"header_by_hash":   server.NewRPCFunc(env.HeaderByHash, "hash"),
-		"validators":       server.NewRPCFunc(env.Validators, "height,page,per_page"),
-		"tx":               server.NewRPCFunc(env.Tx, "hash,prove"),
-		"tx_search":        server.NewRPCFunc(env.TxSearch, "query,prove,page,per_page,order_by"),
-		"block_search":     server.NewRPCFunc(env.BlockSearch, "query,page,per_page,order_by"),
+		"blockchain":            server.NewRPCFunc(env.BlockchainInfo, "minHeight,maxHeight"),
+		"blockchain_locate_txs": server.NewRPCFunc(env.BlockchainLocateTxsInfo, "minHeight,maxHeight,hexAddressString,accAddressString"),
+		"consensus_params":      server.NewRPCFunc(env.ConsensusParams, "height"),
+		"block":                 server.NewRPCFunc(env.Block, "height"),
+		"block_by_hash":         server.NewRPCFunc(env.BlockByHash, "hash"),
+		"block_results":         server.NewRPCFunc(env.BlockResults, "height"),
+		"commit":                server.NewRPCFunc(env.Commit, "height"),
+		"header":                server.NewRPCFunc(env.Header, "height"),
+		"header_by_hash":        server.NewRPCFunc(env.HeaderByHash, "hash"),
+		"validators":            server.NewRPCFunc(env.Validators, "height,page,per_page"),
+		"tx":                    server.NewRPCFunc(env.Tx, "hash,prove"),
+		"tx_search":             server.NewRPCFunc(env.TxSearch, "query,prove,page,per_page,order_by"),
+		"block_search":          server.NewRPCFunc(env.BlockSearch, "query,page,per_page,order_by"),
 	}
 }
 
