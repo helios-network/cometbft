@@ -405,6 +405,21 @@ func (c *baseRPCClient) BlockchainLocateTxsInfo(
 	return result, nil
 }
 
+func (c *baseRPCClient) BlockchainLocateNotEmptyBlocksInfo(
+	ctx context.Context,
+	minHeight,
+	maxHeight int64,
+) (*ctypes.ResultBlockchainInfo, error) {
+	result := new(ctypes.ResultBlockchainInfo)
+	_, err := c.caller.Call(ctx, "blockchain_locate_not_empty_blocks",
+		map[string]interface{}{"minHeight": minHeight, "maxHeight": maxHeight},
+		result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (c *baseRPCClient) Genesis(ctx context.Context) (*ctypes.ResultGenesis, error) {
 	result := new(ctypes.ResultGenesis)
 	_, err := c.caller.Call(ctx, "genesis", map[string]interface{}{}, result)

@@ -129,6 +129,74 @@ func (env *Environment) BlockchainLocateTxsInfo(
 	}, nil
 }
 
+// BlockchainLocateNotEmptyBlocksInfo gets block headers for minHeight <= height <= maxHeight
+// where block header contains ethereum_tx
+//
+// If maxHeight does not yet exist, blocks up to the current height will be
+// returned. If minHeight does not exist (due to pruning), earliest existing
+// height will be used.
+//
+// At most 1000 items will be returned. Block headers are returned in descending
+// order (highest first).
+//
+// # Returned BlockMeta.NumTxs contains the number of tx found in Block
+//
+// More: https://docs.cometbft.com/v0.38.x/rpc/#/Info/blockchain_locate_non_empty_txs
+func (env *Environment) BlockchainLocateNotEmptyBlocksInfo(
+	_ *rpctypes.Context,
+	minHeight, maxHeight int64,
+) (*ctypes.ResultBlockchainInfo, error) {
+	const limit int64 = 1000
+	var err error
+	minHeight, maxHeight, err = filterMinMax(
+		env.BlockStore.Base(),
+		env.BlockStore.Height(),
+		minHeight,
+		maxHeight,
+		limit)
+	if err != nil {
+		return nil, err
+	}
+
+	blockMetas := []*types.BlockMeta{}
+	for height := maxHeight; height >= minHeight; height-- {
+		blockMeta := env.BlockStore.LoadBlockMeta(height)
+		if blockMeta.NumTxs > 0 {
+			results, err := env.StateStore.LoadFinalizeBlockResponse(height)
+			if err != nil {
+				env.Logger.Error("failed to LoadFinalizeBlockResponse", "err", err)
+				return nil, err
+			}
+			found := 0
+			for _, txResult := range results.TxResults {
+				for _, event := range txResult.Events {
+					if event.Type == "message" || event.Type == "ethereum_tx" {
+						for _, attr := range event.Attributes {
+							if string(attr.Key) == "sender" || string(attr.Key) == "recipient" {
+								found += 1
+								break
+							}
+						}
+					}
+				}
+			}
+			if found > 0 {
+				blockMetas = append(blockMetas, &types.BlockMeta{
+					BlockID:   blockMeta.BlockID,
+					BlockSize: blockMeta.BlockSize,
+					Header:    blockMeta.Header,
+					NumTxs:    found, // set number of found
+				})
+			}
+		}
+	}
+
+	return &ctypes.ResultBlockchainInfo{
+		LastHeight: env.BlockStore.Height(),
+		BlockMetas: blockMetas,
+	}, nil
+}
+
 // error if either min or max are negative or min > max
 // if 0, use blockstore base for min, latest block height for max
 // enforce limit.
