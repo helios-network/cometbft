@@ -99,17 +99,21 @@ func (env *Environment) BlockchainLocateTxsInfo(
 			}
 			found := 0
 			for _, txResult := range results.TxResults {
+				isEthTx := false
 				for _, event := range txResult.Events {
 					if event.Type == "message" || event.Type == "ethereum_tx" {
 						for _, attr := range event.Attributes {
 							if string(attr.Key) == "sender" || string(attr.Key) == "recipient" {
 								if string(attr.Value) == senderAccString || string(attr.Value) == senderHexString {
-									found += 1
+									isEthTx = true
 									break
 								}
 							}
 						}
 					}
+				}
+				if isEthTx {
+					found += 1
 				}
 			}
 			if found > 0 {
@@ -169,15 +173,19 @@ func (env *Environment) BlockchainLocateNotEmptyBlocksInfo(
 			}
 			found := 0
 			for _, txResult := range results.TxResults {
+				isEthTx := false
 				for _, event := range txResult.Events {
 					if event.Type == "message" || event.Type == "ethereum_tx" {
 						for _, attr := range event.Attributes {
 							if string(attr.Key) == "sender" || string(attr.Key) == "recipient" {
-								found += 1
+								isEthTx = true
 								break
 							}
 						}
 					}
+				}
+				if isEthTx {
+					found += 1
 				}
 			}
 			if found > 0 {
