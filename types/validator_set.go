@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	bls "github.com/cometbft/cometbft/crypto/bls"
 	"github.com/cometbft/cometbft/crypto/merkle"
 	cmtmath "github.com/cometbft/cometbft/libs/math"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
@@ -53,6 +54,9 @@ type ValidatorSet struct {
 	Validators []*Validator `json:"validators"`
 	Proposer   *Validator   `json:"proposer"`
 
+	blsAggregatedPublicKey *bls.PublicKey
+	blsAggregatedSignature *bls.Signature
+
 	// cached (unexported)
 	totalVotingPower int64
 	// true if all validators have the same type of public key or if the set is empty.
@@ -73,7 +77,14 @@ func NewValidatorSet(valz []*Validator) *ValidatorSet {
 	vals := &ValidatorSet{
 		allKeysHaveSameType: true,
 	}
-	err := vals.updateWithChangeSet(valz, false)
+
+	// Create a deep copy of each validator including BLS public keys
+	valzCopy := make([]*Validator, len(valz))
+	for i, val := range valz {
+		valzCopy[i] = val.Copy()
+	}
+
+	err := vals.updateWithChangeSet(valzCopy, false)
 	if err != nil {
 		panic(fmt.Sprintf("Cannot create validator set: %v", err))
 	}
@@ -736,21 +747,44 @@ func (vals *ValidatorSet) checkAllKeysHaveSameType() {
 	}
 
 	firstKeyType := ""
+	hasBlsKeys := false
+	hasNonBlsKeys := false
+
 	for _, val := range vals.Validators {
-		if firstKeyType == "" {
-			// XXX: Should only be the case in tests.
-			if val.PubKey == nil {
-				continue
-			}
+		// Check ED25519 key type
+		if firstKeyType == "" && val.PubKey != nil {
 			firstKeyType = val.PubKey.Type()
 		}
-		if val.PubKey.Type() != firstKeyType {
+
+		if val.PubKey != nil && val.PubKey.Type() != firstKeyType {
 			vals.allKeysHaveSameType = false
 			return
 		}
+
+		// Track BLS key presence
+		if val.BlsPubKey != nil {
+			hasBlsKeys = true
+		} else {
+			hasNonBlsKeys = true
+		}
 	}
 
-	vals.allKeysHaveSameType = true
+	// Ensure consistency of BLS key presence
+	vals.allKeysHaveSameType = !(hasBlsKeys && hasNonBlsKeys)
+}
+
+func validateBlsPublicKey(blsPubKey *bls.PublicKey) error {
+	if blsPubKey == nil {
+		return errors.New("BLS public key is nil")
+	}
+
+	// Use Compress to check key validity
+	blsPubKeyBytes := blsPubKey.Compress()
+	if len(blsPubKeyBytes) == 0 {
+		return errors.New("BLS public key is empty")
+	}
+
+	return nil
 }
 
 // AllKeysHaveSameType returns true if all validators have the same type of
@@ -854,57 +888,88 @@ func (vals *ValidatorSet) ToProto() (*cmtproto.ValidatorSet, error) {
 	for i := 0; i < len(vals.Validators); i++ {
 		valp, err := vals.Validators[i].ToProto()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error converting validator %d to proto: %w", i, err)
 		}
+
+		// Add BLS public key to proto if available
+		if vals.Validators[i].BlsPubKey != nil {
+			blsPubKeyBytes := vals.Validators[i].BlsPubKey.Compress()
+			valp.BlsPubKey = blsPubKeyBytes
+		}
+
 		valsProto[i] = valp
 	}
 	vp.Validators = valsProto
 
-	valProposer, err := vals.Proposer.ToProto()
-	if err != nil {
-		return nil, fmt.Errorf("toProto: validatorSet proposer error: %w", err)
+	// Handle proposer with BLS key
+	if vals.Proposer != nil {
+		valProposer, err := vals.Proposer.ToProto()
+		if err != nil {
+			return nil, fmt.Errorf("toProto: validatorSet proposer error: %w", err)
+		}
+
+		// Add BLS public key to proposer if available
+		if vals.Proposer.BlsPubKey != nil {
+			blsPubKeyBytes := vals.Proposer.BlsPubKey.Compress()
+			valProposer.BlsPubKey = blsPubKeyBytes
+		}
+
+		vp.Proposer = valProposer
 	}
-	vp.Proposer = valProposer
 
-	// NOTE: Sometimes we use the bytes of the proto form as a hash. This means that we need to
-	// be consistent with cached data
-	vp.TotalVotingPower = 0
-
+	vp.TotalVotingPower = vals.TotalVotingPower()
 	return vp, nil
 }
 
-// ValidatorSetFromProto sets a protobuf ValidatorSet to the given pointer.
-// It returns an error if any of the validators from the set or the proposer
-// is invalid
 func ValidatorSetFromProto(vp *cmtproto.ValidatorSet) (*ValidatorSet, error) {
 	if vp == nil {
-		return nil, errors.New("nil validator set") // validator set should never be nil, bigger issues are at play if empty
+		return nil, errors.New("nil validator set")
 	}
-	vals := new(ValidatorSet)
 
+	vals := new(ValidatorSet)
 	valsProto := make([]*Validator, len(vp.Validators))
+
 	for i := 0; i < len(vp.Validators); i++ {
 		v, err := ValidatorFromProto(vp.Validators[i])
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error converting validator %d from proto: %w", i, err)
 		}
+
+		// Handle BLS public key from proto
+		if len(vp.Validators[i].BlsPubKey) > 0 {
+			blsPubKey, err := bls.PublicKeyFromBytes(vp.Validators[i].BlsPubKey)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing BLS public key for validator %d: %w", i, err)
+			}
+			v.BlsPubKey = blsPubKey
+		}
+
 		valsProto[i] = v
 	}
+
 	vals.Validators = valsProto
 	vals.checkAllKeysHaveSameType()
 
-	p, err := ValidatorFromProto(vp.GetProposer())
-	if err != nil {
-		return nil, fmt.Errorf("fromProto: validatorSet proposer error: %w", err)
+	// Handle proposer with BLS key
+	if vp.Proposer != nil {
+		p, err := ValidatorFromProto(vp.Proposer)
+		if err != nil {
+			return nil, fmt.Errorf("fromProto: validatorSet proposer error: %w", err)
+		}
+
+		// Handle BLS public key for proposer
+		if len(vp.Proposer.BlsPubKey) > 0 {
+			blsPubKey, err := bls.PublicKeyFromBytes(vp.Proposer.BlsPubKey)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing BLS public key for proposer: %w", err)
+			}
+			p.BlsPubKey = blsPubKey
+		}
+
+		vals.Proposer = p
 	}
 
-	vals.Proposer = p
-
-	// NOTE: We can't trust the total voting power given to us by other peers. If someone were to
-	// inject a non-zeo value that wasn't the correct voting power we could assume a wrong total
-	// power hence we need to recompute it.
-	// FIXME: We should look to remove TotalVotingPower from proto or add it in the validators hash
-	// so we don't have to do this
+	// Recompute total voting power
 	vals.TotalVotingPower()
 
 	return vals, vals.ValidateBasic()

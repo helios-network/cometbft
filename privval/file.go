@@ -10,6 +10,7 @@ import (
 	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/cometbft/cometbft/crypto"
+	blscrypto "github.com/cometbft/cometbft/crypto/bls"
 	"github.com/cometbft/cometbft/crypto/ed25519"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
@@ -255,6 +256,17 @@ func (pv *FilePV) GetAddress() types.Address {
 // Implements PrivValidator.
 func (pv *FilePV) GetPubKey() (crypto.PubKey, error) {
 	return pv.Key.PubKey, nil
+}
+
+// GetBlsPrivKey returns the BLS private key
+// GetBlsPrivKey returns a BLS private key derived from the existing private key
+func (pv *FilePV) GetBlsPrivKey() (*blscrypto.PrivateKey, error) {
+	// Use the existing private key's seed to derive a BLS private key
+	seed := pv.Key.PrivKey.Bytes()
+
+	// Use a deterministic key derivation approach
+	blsPrivKey := blscrypto.GeneratePrivateKeyFromSeed(seed)
+	return blsPrivKey, nil
 }
 
 // SignVote signs a canonical representation of the vote, along with the

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/cometbft/cometbft/crypto/batch"
+	"github.com/cometbft/cometbft/crypto/bls"
 	"github.com/cometbft/cometbft/crypto/tmhash"
 	cmtmath "github.com/cometbft/cometbft/libs/math"
 )
@@ -203,6 +204,88 @@ func ValidateHash(h []byte) error {
 	return nil
 }
 
+// verifyBlsAggregatedSignature checks the BLS aggregated signature for a commit
+func verifyBlsAggregatedSignature(
+	chainID string,
+	vals *ValidatorSet,
+	commit *Commit,
+	votingPowerNeeded int64,
+	ignoreSig func(CommitSig) bool,
+	countSig func(CommitSig) bool,
+	lookUpByIndex bool,
+) (int64, error) {
+	// Convert aggregated signature
+	aggSig, err := bls.SignatureFromBytes(commit.AggregatedSignature)
+	if err != nil {
+		return 0, fmt.Errorf("invalid aggregated BLS signature: %w", err)
+	}
+
+	// Collect participating validators and their messages
+	participatingValidators := make([]*Validator, 0)
+	messages := make([][]byte, 0)
+	pubKeys := make([]*bls.PublicKey, 0)
+	seenVals := make(map[int32]int, len(commit.Signatures))
+
+	for idx, commitSig := range commit.Signatures {
+		if ignoreSig(commitSig) {
+			continue
+		}
+
+		var val *Validator
+		var valIdx int32
+
+		// If the vals and commit have a 1-to-1 correspondence we can retrieve
+		// them by index else we need to retrieve them by address
+		if lookUpByIndex {
+			val = vals.Validators[idx]
+		} else {
+			valIdx, val = vals.GetByAddress(commitSig.ValidatorAddress)
+
+			// if the signature doesn't belong to anyone in the validator set
+			// then we just skip over it
+			if val == nil {
+				continue
+			}
+
+			// because we are getting validators by address we need to make sure
+			// that the same validator doesn't commit twice
+			if firstIndex, ok := seenVals[valIdx]; ok {
+				secondIndex := idx
+				return 0, fmt.Errorf("double vote from %v (%d and %d)", val, firstIndex, secondIndex)
+			}
+			seenVals[valIdx] = idx
+		}
+
+		// Skip validators without BLS public key
+		if val.BlsPubKey == nil {
+			continue
+		}
+
+		// Prepare message (vote sign bytes)
+		voteSignBytes := commit.VoteSignBytes(chainID, int32(idx))
+
+		participatingValidators = append(participatingValidators, val)
+		messages = append(messages, voteSignBytes)
+		pubKeys = append(pubKeys, val.BlsPubKey)
+	}
+
+	// Verify the aggregated signature
+	if !bls.AggregateVerify(pubKeys, messages, aggSig) {
+		return 0, errors.New("invalid aggregated BLS signature")
+	}
+
+	// Calculate total voting power
+	var talliedVotingPower int64
+	for _, val := range participatingValidators {
+		valIdx, _ := vals.GetByAddress(val.Address)
+		if countSig(commit.Signatures[valIdx]) {
+			talliedVotingPower += val.VotingPower
+		}
+	}
+
+	return talliedVotingPower, nil
+}
+
 // Batch verification
 
 // verifyCommitBatch batch verifies commits.  This routine is equivalent
@@ -234,6 +317,27 @@ func verifyCommitBatch(
 	if !ok || len(commit.Signatures) < batchVerifyThreshold {
 		// This should *NEVER* happen.
 		return fmt.Errorf("unsupported signature algorithm or insufficient signatures for batch verification")
+	}
+
+	if len(commit.AggregatedSignature) > 0 {
+		talliedVotingPower, err := verifyBlsAggregatedSignature(
+			chainID,
+			vals,
+			commit,
+			votingPowerNeeded,
+			ignoreSig,
+			countSig,
+			lookUpByIndex,
+		)
+		if err != nil {
+			return err
+		}
+
+		if got, needed := talliedVotingPower, votingPowerNeeded; got <= needed {
+			return ErrNotEnoughVotingPowerSigned{Got: got, Needed: needed}
+		}
+
+		return nil
 	}
 
 	for idx, commitSig := range commit.Signatures {
@@ -348,6 +452,27 @@ func verifyCommitSingle(
 
 		if commitSig.ValidateBasic() != nil {
 			return fmt.Errorf("invalid signatures from %v at index %d", val, idx)
+		}
+
+		if len(commit.AggregatedSignature) > 0 {
+			talliedVotingPower, err := verifyBlsAggregatedSignature(
+				chainID,
+				vals,
+				commit,
+				votingPowerNeeded,
+				ignoreSig,
+				countSig,
+				lookUpByIndex,
+			)
+			if err != nil {
+				return err
+			}
+
+			if got, needed := talliedVotingPower, votingPowerNeeded; got <= needed {
+				return ErrNotEnoughVotingPowerSigned{Got: got, Needed: needed}
+			}
+
+			return nil
 		}
 
 		// If the vals and commit have a 1-to-1 correspondence we can retrieve

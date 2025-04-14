@@ -215,11 +215,11 @@ func (voteSet *VoteSet) addVote(vote *Vote) (added bool, err error) {
 
 	// Check signature.
 	if voteSet.extensionsEnabled {
-		if err := vote.VerifyVoteAndExtension(voteSet.chainID, val.PubKey); err != nil {
+		if err := vote.VerifyVoteAndExtension(voteSet.chainID, val.BlsPubKey); err != nil {
 			return false, fmt.Errorf("failed to verify extended vote with ChainID %s and PubKey %s: %w", voteSet.chainID, val.PubKey, err)
 		}
 	} else {
-		if err := vote.Verify(voteSet.chainID, val.PubKey); err != nil {
+		if err := vote.Verify(voteSet.chainID, val.BlsPubKey); err != nil {
 			return false, fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s: %w", voteSet.chainID, val.PubKey, err)
 		}
 		if len(vote.ExtensionSignature) > 0 || len(vote.Extension) > 0 {

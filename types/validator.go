@@ -10,27 +10,36 @@ import (
 	ce "github.com/cometbft/cometbft/crypto/encoding"
 	cmtrand "github.com/cometbft/cometbft/libs/rand"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+
+	blscrypto "github.com/cometbft/cometbft/crypto/bls"
 )
 
-// Volatile state for each Validator
-// NOTE: The ProposerPriority is not included in Validator.Hash();
-// make sure to update that method if changes are made here
+// Validator now includes optional BLS public key
 type Validator struct {
 	Address     Address       `json:"address"`
 	PubKey      crypto.PubKey `json:"pub_key"`
 	VotingPower int64         `json:"voting_power"`
 
-	ProposerPriority int64 `json:"proposer_priority"`
+	ProposerPriority int64                `json:"proposer_priority"`
+	BlsPubKey        *blscrypto.PublicKey `json:"bls_pub_key,omitempty"`
 }
 
 // NewValidator returns a new validator with the given pubkey and voting power.
-func NewValidator(pubKey crypto.PubKey, votingPower int64) *Validator {
-	return &Validator{
+// Optionally allows adding a BLS public key
+func NewValidator(pubKey crypto.PubKey, votingPower int64, blsPubKey ...*blscrypto.PublicKey) *Validator {
+	val := &Validator{
 		Address:          pubKey.Address(),
 		PubKey:           pubKey,
 		VotingPower:      votingPower,
 		ProposerPriority: 0,
 	}
+
+	// Set BLS public key if provided
+	if len(blsPubKey) > 0 && blsPubKey[0] != nil {
+		val.BlsPubKey = blsPubKey[0]
+	}
+
+	return val
 }
 
 // ValidateBasic performs basic validation.
@@ -51,13 +60,26 @@ func (v *Validator) ValidateBasic() error {
 		return fmt.Errorf("validator address is incorrectly derived from pubkey. Exp: %v, got %v", addr, v.Address)
 	}
 
+	// Optional BLS public key validation
+	if v.BlsPubKey != nil && !blscrypto.IsValidPublicKey(v.BlsPubKey) {
+		return errors.New("invalid BLS public key")
+	}
+
 	return nil
 }
 
 // Creates a new copy of the validator so we can mutate ProposerPriority.
 // Panics if the validator is nil.
 func (v *Validator) Copy() *Validator {
+	if v == nil {
+		return nil
+	}
 	vCopy := *v
+	// Deep copy BLS public key if exists
+	if v.BlsPubKey != nil {
+		blsPubKeyCopy, _ := blscrypto.PublicKeyFromBytes(blscrypto.PublicKeyToBytes(v.BlsPubKey))
+		vCopy.BlsPubKey = blsPubKeyCopy
+	}
 	return &vCopy
 }
 
@@ -85,15 +107,21 @@ func (v *Validator) CompareProposerPriority(other *Validator) *Validator {
 }
 
 // String returns a string representation of String.
-//
-// 1. address
-// 2. public key
-// 3. voting power
-// 4. proposer priority
 func (v *Validator) String() string {
 	if v == nil {
 		return "nil-Validator"
 	}
+
+	// Include BLS public key in string representation if exists
+	if v.BlsPubKey != nil {
+		return fmt.Sprintf("Validator{%v %v VP:%v BLS:%v A:%v}",
+			v.Address,
+			v.PubKey,
+			v.VotingPower,
+			blscrypto.PublicKeyToHex(v.BlsPubKey),
+			v.ProposerPriority)
+	}
+
 	return fmt.Sprintf("Validator{%v %v VP:%v A:%v}",
 		v.Address,
 		v.PubKey,
@@ -112,9 +140,6 @@ func ValidatorListString(vals []*Validator) string {
 }
 
 // Bytes computes the unique encoding of a validator with a given voting power.
-// These are the bytes that gets hashed in consensus. It excludes address
-// as its redundant with the pubkey. This also excludes ProposerPriority
-// which changes every round.
 func (v *Validator) Bytes() []byte {
 	pk, err := ce.PubKeyToProto(v.PubKey)
 	if err != nil {
@@ -133,7 +158,7 @@ func (v *Validator) Bytes() []byte {
 	return bz
 }
 
-// ToProto converts Valiator to protobuf
+// ToProto converts Validator to protobuf
 func (v *Validator) ToProto() (*cmtproto.Validator, error) {
 	if v == nil {
 		return nil, errors.New("nil validator")
@@ -151,11 +176,15 @@ func (v *Validator) ToProto() (*cmtproto.Validator, error) {
 		ProposerPriority: v.ProposerPriority,
 	}
 
+	// Add BLS public key to protobuf if exists
+	if v.BlsPubKey != nil {
+		vp.BlsPubKey = blscrypto.PublicKeyToBytes(v.BlsPubKey)
+	}
+
 	return &vp, nil
 }
 
-// FromProto sets a protobuf Validator to the given pointer.
-// It returns an error if the public key is invalid.
+// ValidatorFromProto sets a protobuf Validator to the given pointer.
 func ValidatorFromProto(vp *cmtproto.Validator) (*Validator, error) {
 	if vp == nil {
 		return nil, errors.New("nil validator")
@@ -165,20 +194,25 @@ func ValidatorFromProto(vp *cmtproto.Validator) (*Validator, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	v := new(Validator)
 	v.Address = vp.GetAddress()
 	v.PubKey = pk
 	v.VotingPower = vp.GetVotingPower()
 	v.ProposerPriority = vp.GetProposerPriority()
 
+	// Parse BLS public key if exists
+	if len(vp.BlsPubKey) > 0 {
+		blsPubKey, err := blscrypto.PublicKeyFromBytes(vp.BlsPubKey)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing BLS public key: %w", err)
+		}
+		v.BlsPubKey = blsPubKey
+	}
+
 	return v, nil
 }
 
-//----------------------------------------
-// RandValidator
-
-// RandValidator returns a randomized validator, useful for testing.
-// UNSTABLE
 func RandValidator(randPower bool, minPower int64) (*Validator, PrivValidator) {
 	privVal := NewMockPV()
 	votePower := minPower
@@ -189,6 +223,18 @@ func RandValidator(randPower bool, minPower int64) (*Validator, PrivValidator) {
 	if err != nil {
 		panic(fmt.Errorf("could not retrieve pubkey %w", err))
 	}
-	val := NewValidator(pubKey, votePower)
+
+	// Get BLS private key
+	blsPrivKey, err := privVal.GetBlsPrivKey()
+	if err != nil {
+		panic(fmt.Errorf("could not retrieve BLS private key %w", err))
+	}
+
+	// Create validator with both ED25519 and BLS public keys
+	val := NewValidator(
+		pubKey,
+		votePower,
+		blsPrivKey.PublicKey(), // Include BLS public key
+	)
 	return val, privVal
 }

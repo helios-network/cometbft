@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/crypto/bls"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 	"github.com/cometbft/cometbft/libs/protoio"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	blst "github.com/supranational/blst/bindings/go"
 )
 
 const (
@@ -216,21 +218,36 @@ func (vote *Vote) String() string {
 	)
 }
 
-func (vote *Vote) verifyAndReturnProto(chainID string, pubKey crypto.PubKey) (*cmtproto.Vote, error) {
-	if !bytes.Equal(pubKey.Address(), vote.ValidatorAddress) {
+func (vote *Vote) verifyAndReturnProto(chainID string, blsPubKey *blst.P1Affine) (*cmtproto.Vote, error) {
+	// Check validator address
+	if !bytes.Equal(bls.PublicKeyAddress(blsPubKey), vote.ValidatorAddress) {
 		return nil, ErrVoteInvalidValidatorAddress
 	}
+
+	// Convert vote to proto
 	v := vote.ToProto()
-	if !pubKey.VerifySignature(VoteSignBytes(chainID, v), vote.Signature) {
+
+	// Get sign bytes
+	signBytes := VoteSignBytes(chainID, v)
+
+	// Convert signature to BLS signature
+	signature, err := bls.SignatureFromBytes(vote.Signature)
+	if err != nil {
 		return nil, ErrVoteInvalidSignature
 	}
+
+	// Verify signature
+	if !bls.Verify(blsPubKey, signBytes, signature) {
+		return nil, ErrVoteInvalidSignature
+	}
+
 	return v, nil
 }
 
 // Verify checks whether the signature associated with this vote corresponds to
 // the given chain ID and public key. This function does not validate vote
 // extension signatures - to do so, use VerifyWithExtension instead.
-func (vote *Vote) Verify(chainID string, pubKey crypto.PubKey) error {
+func (vote *Vote) Verify(chainID string, pubKey *blst.P1Affine) error {
 	_, err := vote.verifyAndReturnProto(chainID, pubKey)
 	return err
 }
@@ -239,36 +256,63 @@ func (vote *Vote) Verify(chainID string, pubKey crypto.PubKey) error {
 // additionally checks whether the vote extension signature corresponds to the
 // given chain ID and public key. We only verify vote extension signatures for
 // precommits.
-func (vote *Vote) VerifyVoteAndExtension(chainID string, pubKey crypto.PubKey) error {
-	v, err := vote.verifyAndReturnProto(chainID, pubKey)
+// VerifyVoteAndExtension performs verification including extension signature
+func (vote *Vote) VerifyVoteAndExtension(chainID string, blsPubKey *blst.P1Affine) error {
+
+	// First verify the main vote signature
+	v, err := vote.verifyAndReturnProto(chainID, blsPubKey)
 	if err != nil {
 		return err
 	}
-	// We only verify vote extension signatures for non-nil precommits.
+
+	// We only verify vote extension signatures for non-nil precommits
 	if vote.Type == cmtproto.PrecommitType && !ProtoBlockIDIsNil(&v.BlockID) {
 		if len(vote.ExtensionSignature) == 0 {
 			return errors.New("expected vote extension signature")
 		}
 
+		// Get extension sign bytes
 		extSignBytes := VoteExtensionSignBytes(chainID, v)
-		if !pubKey.VerifySignature(extSignBytes, vote.ExtensionSignature) {
+
+		// Convert extension signature to BLS signature
+		extSignature, err := bls.SignatureFromBytes(vote.ExtensionSignature)
+		if err != nil {
+			return ErrVoteInvalidSignature
+		}
+
+		// Verify extension signature
+		if !bls.Verify(blsPubKey, extSignBytes, extSignature) {
 			return ErrVoteInvalidSignature
 		}
 	}
+
 	return nil
 }
 
 // VerifyExtension checks whether the vote extension signature corresponds to the
 // given chain ID and public key.
-func (vote *Vote) VerifyExtension(chainID string, pubKey crypto.PubKey) error {
+func (vote *Vote) VerifyExtension(chainID string, blsPubKey *blst.P1Affine) error {
 	if vote.Type != cmtproto.PrecommitType || vote.BlockID.IsZero() {
 		return nil
 	}
+
+	// Convert vote to proto
 	v := vote.ToProto()
+
+	// Get extension sign bytes
 	extSignBytes := VoteExtensionSignBytes(chainID, v)
-	if !pubKey.VerifySignature(extSignBytes, vote.ExtensionSignature) {
+
+	// Convert extension signature to BLS signature
+	extSignature, err := bls.SignatureFromBytes(vote.ExtensionSignature)
+	if err != nil {
 		return ErrVoteInvalidSignature
 	}
+
+	// Verify extension signature
+	if !bls.Verify(blsPubKey, extSignBytes, extSignature) {
+		return ErrVoteInvalidSignature
+	}
+
 	return nil
 }
 

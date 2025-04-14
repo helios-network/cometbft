@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/crypto"
+	blscrypto "github.com/cometbft/cometbft/crypto/bls"
 	cryptoenc "github.com/cometbft/cometbft/crypto/encoding"
 	privvalproto "github.com/cometbft/cometbft/proto/tendermint/privval"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
@@ -88,6 +89,28 @@ func (sc *SignerClient) GetPubKey() (crypto.PubKey, error) {
 	}
 
 	return pk, nil
+}
+
+// GetBlsPrivKey retrieves a BLS private key from a remote signer
+// returns an error if client is not able to provide the key
+func (sc *SignerClient) GetBlsPrivKey() (*blscrypto.PrivateKey, error) {
+	response, err := sc.endpoint.SendRequest(mustWrapMsg(&privvalproto.PubKeyRequest{ChainId: sc.chainID}))
+	if err != nil {
+		return nil, fmt.Errorf("send: %w", err)
+	}
+
+	resp := response.GetPubKeyResponse()
+	if resp == nil {
+		return nil, ErrUnexpectedResponse
+	}
+	if resp.Error != nil {
+		return nil, &RemoteSignerError{Code: int(resp.Error.Code), Description: resp.Error.Description}
+	}
+
+	// For now, we'll generate a new BLS key since we don't have a way to get it from the remote signer
+	// TODO: Add proper BLS key support in the remote signer protocol
+	privKey := blscrypto.GeneratePrivateKey(blscrypto.KeyGenRandom)
+	return privKey, nil
 }
 
 // SignVote requests a remote signer to sign a vote

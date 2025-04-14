@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/crypto"
+	blscrypto "github.com/cometbft/cometbft/crypto/bls"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cometbft/cometbft/types"
 )
@@ -61,6 +62,27 @@ func (sc *RetrySignerClient) GetPubKey() (crypto.PubKey, error) {
 		time.Sleep(sc.timeout)
 	}
 	return nil, fmt.Errorf("exhausted all attempts to get pubkey: %w", err)
+}
+
+// GetBlsPrivKey retrieves a BLS private key from a remote signer
+// returns an error if client is not able to provide the key
+func (sc *RetrySignerClient) GetBlsPrivKey() (*blscrypto.PrivateKey, error) {
+	var (
+		privKey *blscrypto.PrivateKey
+		err     error
+	)
+	for i := 0; i < sc.retries || sc.retries == 0; i++ {
+		privKey, err = sc.next.GetBlsPrivKey()
+		if err == nil {
+			return privKey, nil
+		}
+		// If remote signer errors, we don't retry.
+		if _, ok := err.(*RemoteSignerError); ok {
+			return nil, err
+		}
+		time.Sleep(sc.timeout)
+	}
+	return nil, fmt.Errorf("exhausted all attempts to get BLS private key: %w", err)
 }
 
 func (sc *RetrySignerClient) SignVote(chainID string, vote *cmtproto.Vote) error {

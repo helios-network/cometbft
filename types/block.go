@@ -849,6 +849,8 @@ type Commit struct {
 	BlockID    BlockID     `json:"block_id"`
 	Signatures []CommitSig `json:"signatures"`
 
+	// New field for BLS aggregated signature
+	AggregatedSignature []byte `json:"aggregated_signature,omitempty"`
 	// Memoized in first call to corresponding method.
 	// NOTE: can't memoize in constructor because constructor isn't used for
 	// unmarshaling.
@@ -1013,6 +1015,7 @@ func (commit *Commit) ToProto() *cmtproto.Commit {
 	c.Height = commit.Height
 	c.Round = commit.Round
 	c.BlockID = commit.BlockID.ToProto()
+	c.BlsAggregatedSignature = commit.AggregatedSignature
 
 	return c
 }
@@ -1042,6 +1045,7 @@ func CommitFromProto(cp *cmtproto.Commit) (*Commit, error) {
 	commit.Height = cp.Height
 	commit.Round = cp.Round
 	commit.BlockID = *bi
+	commit.AggregatedSignature = cp.BlsAggregatedSignature
 
 	return commit, commit.ValidateBasic()
 }
@@ -1051,10 +1055,11 @@ func CommitFromProto(cp *cmtproto.Commit) (*Commit, error) {
 // ExtendedCommit is similar to Commit, except that its signatures also retain
 // their corresponding vote extensions and vote extension signatures.
 type ExtendedCommit struct {
-	Height             int64
-	Round              int32
-	BlockID            BlockID
-	ExtendedSignatures []ExtendedCommitSig
+	Height              int64
+	Round               int32
+	BlockID             BlockID
+	ExtendedSignatures  []ExtendedCommitSig
+	AggregatedSignature []byte
 
 	bitArray *bits.BitArray
 }

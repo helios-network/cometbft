@@ -16,6 +16,7 @@ import (
 	cfg "github.com/cometbft/cometbft/config"
 	cstypes "github.com/cometbft/cometbft/consensus/types"
 	"github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/crypto/bls"
 	cmtevents "github.com/cometbft/cometbft/libs/events"
 	"github.com/cometbft/cometbft/libs/fail"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
@@ -1728,6 +1729,21 @@ func (cs *State) finalizeCommit(height int64) {
 		// NOTE: the seenCommit is local justification to commit this block,
 		// but may differ from the LastCommit included in the next block
 		seenExtendedCommit := cs.Votes.Precommits(cs.CommitRound).MakeExtendedCommit(cs.state.ConsensusParams.ABCI)
+		blsAggregator := types.NewBlsSignatureAggregator(cs.state.Validators)
+
+		validVotes := make([]*types.Vote, 0)
+		for i := range cs.Votes.Precommits(cs.CommitRound).List() {
+			vote := &cs.Votes.Precommits(cs.CommitRound).List()[i]
+			if len(vote.Signature) > 0 {
+				validVotes = append(validVotes, vote)
+			}
+		}
+
+		// Attempt to aggregate signatures
+		if aggregatedSig, err := blsAggregator.AggregateVoteSignatures(validVotes); err == nil {
+			seenExtendedCommit.AggregatedSignature = bls.SignatureToBytes(aggregatedSig)
+		}
+
 		if cs.state.ConsensusParams.ABCI.VoteExtensionsEnabled(block.Height) {
 			cs.blockStore.SaveBlockWithExtendedCommit(block, blockParts, seenExtendedCommit)
 		} else {
@@ -2192,7 +2208,10 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 			// Here, we verify the signature of the vote extension included in the vote
 			// message.
 			_, val := cs.state.Validators.GetByIndex(vote.ValidatorIndex)
-			if err := vote.VerifyExtension(cs.state.ChainID, val.PubKey); err != nil {
+			if val.BlsPubKey == nil {
+				return false, fmt.Errorf("validator %x does not have a BLS public key", val.Address)
+			}
+			if err := vote.VerifyExtension(cs.state.ChainID, val.BlsPubKey); err != nil {
 				return false, err
 			}
 
@@ -2399,6 +2418,24 @@ func (cs *State) signVote(
 		panic(fmt.Sprintf("non-recoverable error when signing vote %v: %v", vote, err))
 	}
 
+	// Get the private validator's BLS key
+	blsKey, err := cs.privValidator.GetBlsPrivKey()
+	if err != nil {
+		return nil, errors.New("failed to get BLS key")
+	}
+
+	// Get vote sign bytes
+	protoVote := vote.ToProto()
+	signBytes := types.VoteSignBytes(cs.state.ChainID, protoVote)
+
+	// Sign with BLS
+	blsSig := blsKey.Sign(signBytes)
+	if blsSig == nil {
+		return nil, errors.New("failed to create BLS signature")
+	}
+
+	// Set the signature
+	vote.Signature = bls.SignatureToBytes(blsSig)
 	return vote, err
 }
 
