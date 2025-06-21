@@ -46,6 +46,9 @@ type BlockExecutor struct {
 	logger log.Logger
 
 	metrics *Metrics
+
+	// path to the chain data metadata file
+	chainDataMetadataPath string
 }
 
 type BlockExecutorOption func(executor *BlockExecutor)
@@ -53,6 +56,13 @@ type BlockExecutorOption func(executor *BlockExecutor)
 func BlockExecutorWithMetrics(metrics *Metrics) BlockExecutorOption {
 	return func(blockExec *BlockExecutor) {
 		blockExec.metrics = metrics
+	}
+}
+
+// BlockExecutorWithChainDataMetadataPath sets the path for the chain data metadata file
+func BlockExecutorWithChainDataMetadataPath(path string) BlockExecutorOption {
+	return func(blockExec *BlockExecutor) {
+		blockExec.chainDataMetadataPath = path
 	}
 }
 
@@ -302,6 +312,12 @@ func (blockExec *BlockExecutor) applyBlock(state State, blockID types.BlockID, b
 	state, err = updateState(state, blockID, &block.Header, abciResponse, validatorUpdates)
 	if err != nil {
 		return state, fmt.Errorf("commit failed for application: %v", err)
+	}
+
+	// Update chain data metadata file with the latest block information
+	if err := blockExec.updateChainDataMetadata(block, state); err != nil {
+		blockExec.logger.Error("failed to update chain data metadata", "err", err)
+		// Don't fail the block execution for metadata update errors
 	}
 
 	// Lock mempool, commit app state, update mempoool.
@@ -840,4 +856,41 @@ func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64, state State) (ui
 		return 0, fmt.Errorf("failed to prune state store: %w", err)
 	}
 	return amountPruned, nil
+}
+
+// updateChainDataMetadata updates the chain data metadata file with the latest block information
+func (blockExec *BlockExecutor) updateChainDataMetadata(block *types.Block, state State) error {
+	// Use the configured path, or skip if not configured
+	if blockExec.chainDataMetadataPath == "" {
+		blockExec.logger.Debug("chain data metadata path not configured, skipping update")
+		return nil
+	}
+
+	// Create the metadata structure
+	chainDataMetadata := types.ChainDataMetadata{
+		ChainID:    state.ChainID,
+		Height:     block.Height,
+		Hash:       block.Hash().String(),
+		Time:       block.Time.Format(time.RFC3339),
+		Proposer:   fmt.Sprintf("%X", block.ProposerAddress),
+		Validators: []string{},
+	}
+
+	// Add validator addresses to the metadata
+	for _, val := range state.Validators.Validators {
+		chainDataMetadata.Validators = append(chainDataMetadata.Validators, fmt.Sprintf("%X", val.Address))
+	}
+
+	// Save the metadata to file
+	if err := chainDataMetadata.SaveAs(blockExec.chainDataMetadataPath); err != nil {
+		blockExec.logger.Error("failed to update chain data metadata file", "err", err)
+		return err
+	}
+
+	blockExec.logger.Info("updated chain data metadata file",
+		"height", block.Height,
+		"hash", block.Hash().String(),
+		"file", blockExec.chainDataMetadataPath)
+
+	return nil
 }

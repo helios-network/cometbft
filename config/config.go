@@ -34,8 +34,9 @@ const (
 	DefaultConfigFileName  = "config.toml"
 	DefaultGenesisJSONName = "genesis.json"
 
-	DefaultPrivValKeyName   = "priv_validator_key.json"
-	DefaultPrivValStateName = "priv_validator_state.json"
+	DefaultPrivValKeyName        = "priv_validator_key.json"
+	DefaultPrivValStateName      = "priv_validator_state.json"
+	DefaultChainDataMetadataName = "metadata.json"
 
 	DefaultNodeKeyName  = "node_key.json"
 	DefaultAddrBookName = "addrbook.json"
@@ -51,10 +52,11 @@ const (
 // config/toml.go
 // NOTE: libs/cli must know to look in the config dir!
 var (
-	defaultConfigFilePath   = filepath.Join(DefaultConfigDir, DefaultConfigFileName)
-	defaultGenesisJSONPath  = filepath.Join(DefaultConfigDir, DefaultGenesisJSONName)
-	defaultPrivValKeyPath   = filepath.Join(DefaultConfigDir, DefaultPrivValKeyName)
-	defaultPrivValStatePath = filepath.Join(DefaultDataDir, DefaultPrivValStateName)
+	defaultConfigFilePath        = filepath.Join(DefaultConfigDir, DefaultConfigFileName)
+	defaultGenesisJSONPath       = filepath.Join(DefaultConfigDir, DefaultGenesisJSONName)
+	defaultPrivValKeyPath        = filepath.Join(DefaultConfigDir, DefaultPrivValKeyName)
+	defaultPrivValStatePath      = filepath.Join(DefaultDataDir, DefaultPrivValStateName)
+	defaultChainDataMetadataPath = filepath.Join(DefaultDataDir, DefaultChainDataMetadataName)
 
 	defaultNodeKeyPath  = filepath.Join(DefaultConfigDir, DefaultNodeKeyName)
 	defaultAddrBookPath = filepath.Join(DefaultConfigDir, DefaultAddrBookName)
@@ -224,6 +226,9 @@ type BaseConfig struct { //nolint: maligned
 	// Path to the JSON file containing the last sign state of a validator
 	PrivValidatorState string `mapstructure:"priv_validator_state_file"`
 
+	// Path to the JSON file containing the chain data metadata
+	ChainDataMetadata string `mapstructure:"chain_data_metadata_file"`
+
 	// TCP or UNIX socket address for CometBFT to listen on for
 	// connections from an external PrivValidator process
 	PrivValidatorListenAddr string `mapstructure:"priv_validator_laddr"`
@@ -246,6 +251,7 @@ func DefaultBaseConfig() BaseConfig {
 		Genesis:            defaultGenesisJSONPath,
 		PrivValidatorKey:   defaultPrivValKeyPath,
 		PrivValidatorState: defaultPrivValStatePath,
+		ChainDataMetadata:  defaultChainDataMetadataPath,
 		NodeKey:            defaultNodeKeyPath,
 		Moniker:            defaultMoniker,
 		ProxyApp:           "tcp://127.0.0.1:26658",
@@ -279,6 +285,10 @@ func (cfg BaseConfig) PrivValidatorKeyFile() string {
 // PrivValidatorFile returns the full path to the priv_validator_state.json file
 func (cfg BaseConfig) PrivValidatorStateFile() string {
 	return rootify(cfg.PrivValidatorState, cfg.RootDir)
+}
+
+func (cfg BaseConfig) ChainDataMetadataFile() string {
+	return rootify(cfg.ChainDataMetadata, cfg.RootDir)
 }
 
 // NodeKeyFile returns the full path to the node_key.json file

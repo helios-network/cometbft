@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -75,6 +76,25 @@ func initFilesWithConfig(config *cfg.Config) error {
 			return err
 		}
 		logger.Info("Generated genesis file", "path", genFile)
+	}
+
+	// chain data metadata file
+	chainDataMetadataFile := config.ChainDataMetadataFile()
+	if cmtos.FileExists(chainDataMetadataFile) {
+		logger.Info("Found chain data metadata file", "path", chainDataMetadataFile)
+	} else {
+		chainDataMetadata := types.ChainDataMetadata{
+			ChainID:    fmt.Sprintf("test-chain-%v", cmtrand.Str(6)),
+			Height:     0,
+			Hash:       "",
+			Time:       cmttime.Now().Format(time.RFC3339),
+			Proposer:   "",
+			Validators: []string{},
+		}
+		if err := chainDataMetadata.SaveAs(chainDataMetadataFile); err != nil {
+			return err
+		}
+		logger.Info("Generated chain data metadata file", "path", chainDataMetadataFile)
 	}
 
 	return nil
