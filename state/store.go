@@ -71,6 +71,10 @@ type Store interface {
 	Save(State) error
 	// SaveFinalizeBlockResponse saves ABCIResponses for a given height
 	SaveFinalizeBlockResponse(int64, *abci.ResponseFinalizeBlock) error
+	// RemoveFinalizeBlockResponse removes the abciResponse for a given height
+	RemoveFinalizeBlockResponse(int64) error
+	// ReplaceLastFinalizeBlockResponse replaces the last abciResponse with a new one
+	ReplaceLastFinalizeBlockResponse(int64, *abci.ResponseFinalizeBlock) error
 	// Bootstrap is used for bootstrapping state when not starting from a initial height.
 	Bootstrap(State) error
 	// PruneStates takes the height from which to start pruning and which height stop at
@@ -529,6 +533,23 @@ func (store dbStore) SaveFinalizeBlockResponse(height int64, resp *abci.Response
 
 	// We always save the last ABCI response for crash recovery.
 	// This overwrites the previous saved ABCI Response.
+	response := &cmtstate.ABCIResponsesInfo{
+		ResponseFinalizeBlock: resp,
+		Height:                height,
+	}
+	bz, err := response.Marshal()
+	if err != nil {
+		return err
+	}
+
+	return store.db.SetSync(lastABCIResponseKey, bz)
+}
+
+func (store dbStore) RemoveFinalizeBlockResponse(height int64) error {
+	return store.db.Delete(calcABCIResponsesKey(height))
+}
+
+func (store dbStore) ReplaceLastFinalizeBlockResponse(height int64, resp *abci.ResponseFinalizeBlock) error {
 	response := &cmtstate.ABCIResponsesInfo{
 		ResponseFinalizeBlock: resp,
 		Height:                height,

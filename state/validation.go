@@ -2,6 +2,7 @@ package state
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -52,7 +53,9 @@ func validateBlock(state State, block *types.Block) error {
 
 	// Validate app info
 	if !bytes.Equal(block.AppHash, state.AppHash) {
-		//ss
+
+		fmt.Println("cometbft wrong AppHash", block.Header.Height, block.AppHash.String(), "!=", hex.EncodeToString(state.AppHash))
+		// todo dump block to file
 		return fmt.Errorf("wrong Block.Header.AppHash.  Expected %X, got %v",
 			state.AppHash,
 			block.AppHash,

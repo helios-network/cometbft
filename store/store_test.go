@@ -484,7 +484,7 @@ func TestLoadBaseMeta(t *testing.T) {
 		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
 	}
 
-	_, _, err = bs.PruneBlocks(4, state)
+	_, err = bs.PruneBlocks(4, state)
 	require.NoError(t, err)
 
 	baseBlock := bs.LoadBaseMeta()
@@ -559,10 +559,10 @@ func TestPruneBlocks(t *testing.T) {
 	assert.EqualValues(t, 0, bs.Size())
 
 	// pruning an empty store should error, even when pruning to 0
-	_, _, err = bs.PruneBlocks(1, state)
+	_, err = bs.PruneBlocks(1, state)
 	require.Error(t, err)
 
-	_, _, err = bs.PruneBlocks(0, state)
+	_, err = bs.PruneBlocks(0, state)
 	require.Error(t, err)
 
 	// make more than 1000 blocks, to test batch deletions
@@ -585,13 +585,12 @@ func TestPruneBlocks(t *testing.T) {
 	state.ConsensusParams.Evidence.MaxAgeDuration = 1 * time.Second
 
 	// Check that basic pruning works
-	pruned, evidenceRetainHeight, err := bs.PruneBlocks(1200, state)
+	pruned, err := bs.PruneBlocks(1200, state)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1199, pruned)
 	assert.EqualValues(t, 1200, bs.Base())
 	assert.EqualValues(t, 1500, bs.Height())
 	assert.EqualValues(t, 301, bs.Size())
-	assert.EqualValues(t, 1100, evidenceRetainHeight)
 
 	require.NotNil(t, bs.LoadBlock(1200))
 	require.Nil(t, bs.LoadBlock(1199))
@@ -611,16 +610,16 @@ func TestPruneBlocks(t *testing.T) {
 	}
 
 	// Pruning below the current base should error
-	_, _, err = bs.PruneBlocks(1199, state)
+	_, err = bs.PruneBlocks(1199, state)
 	require.Error(t, err)
 
 	// Pruning to the current base should work
-	pruned, _, err = bs.PruneBlocks(1200, state)
+	pruned, err = bs.PruneBlocks(1200, state)
 	require.NoError(t, err)
 	assert.EqualValues(t, 0, pruned)
 
 	// Pruning again should work
-	pruned, _, err = bs.PruneBlocks(1300, state)
+	pruned, err = bs.PruneBlocks(1300, state)
 	require.NoError(t, err)
 	assert.EqualValues(t, 100, pruned)
 	assert.EqualValues(t, 1300, bs.Base())
@@ -633,11 +632,11 @@ func TestPruneBlocks(t *testing.T) {
 	require.Nil(t, bs.LoadBlockCommit(1099))
 
 	// Pruning beyond the current height should error
-	_, _, err = bs.PruneBlocks(1501, state)
+	_, err = bs.PruneBlocks(1501, state)
 	require.Error(t, err)
 
 	// Pruning to the current height should work
-	pruned, _, err = bs.PruneBlocks(1500, state)
+	pruned, err = bs.PruneBlocks(1500, state)
 	require.NoError(t, err)
 	assert.EqualValues(t, 200, pruned)
 	assert.Nil(t, bs.LoadBlock(1499))
