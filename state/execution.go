@@ -13,6 +13,8 @@ import (
 	"github.com/cometbft/cometbft/mempool"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cometbft/cometbft/proxy"
+	"github.com/cometbft/cometbft/state/indexer"
+	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cometbft/cometbft/types"
 )
 
@@ -40,6 +42,12 @@ type BlockExecutor struct {
 	mempool mempool.Mempool
 	evpool  EvidencePool
 
+	// transaction indexer for pruning
+	txIndexer txindex.TxIndexer
+
+	// block indexer for pruning
+	blockIndexer indexer.BlockIndexer
+
 	// 1-element cache of validated blocks
 	lastValidatedBlock *types.Block
 
@@ -63,6 +71,20 @@ func BlockExecutorWithMetrics(metrics *Metrics) BlockExecutorOption {
 func BlockExecutorWithChainDataMetadataPath(path string) BlockExecutorOption {
 	return func(blockExec *BlockExecutor) {
 		blockExec.chainDataMetadataPath = path
+	}
+}
+
+// BlockExecutorWithTxIndexer sets the transaction indexer for pruning
+func BlockExecutorWithTxIndexer(txIndexer txindex.TxIndexer) BlockExecutorOption {
+	return func(blockExec *BlockExecutor) {
+		blockExec.txIndexer = txIndexer
+	}
+}
+
+// BlockExecutorWithBlockIndexer sets the block indexer for pruning
+func BlockExecutorWithBlockIndexer(blockIndexer indexer.BlockIndexer) BlockExecutorOption {
+	return func(blockExec *BlockExecutor) {
+		blockExec.blockIndexer = blockIndexer
 	}
 }
 
@@ -845,7 +867,7 @@ func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64, state State) (ui
 		return 0, nil
 	}
 
-	amountPruned, err := blockExec.blockStore.PruneBlocks(retainHeight, state)
+	amountPruned, _, err := blockExec.blockStore.PruneBlocks(retainHeight, state)
 	if err != nil {
 		return 0, fmt.Errorf("failed to prune block store: %w", err)
 	}
@@ -854,6 +876,29 @@ func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64, state State) (ui
 	if err != nil {
 		return 0, fmt.Errorf("failed to prune state store: %w", err)
 	}
+
+	// Prune transaction indexer if available
+	if blockExec.txIndexer != nil {
+		err = blockExec.txIndexer.PruneTransactionsFromTo(base, retainHeight)
+		if err != nil {
+			blockExec.logger.Error("failed to prune transaction indexer", "err", err)
+			// Don't fail the entire pruning process if tx indexer pruning fails
+		} else {
+			blockExec.logger.Debug("pruned transaction indexer", "from_height", base, "to_height", retainHeight)
+		}
+	}
+
+	// Prune block indexer if available
+	if blockExec.blockIndexer != nil {
+		err = blockExec.blockIndexer.PruneBlocks(base, retainHeight)
+		if err != nil {
+			blockExec.logger.Error("failed to prune block indexer", "err", err)
+			// Don't fail the entire pruning process if block indexer pruning fails
+		} else {
+			blockExec.logger.Debug("pruned block indexer", "from_height", base, "to_height", retainHeight)
+		}
+	}
+
 	return amountPruned, nil
 }
 

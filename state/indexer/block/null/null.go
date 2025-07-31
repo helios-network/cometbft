@@ -27,5 +27,10 @@ func (idx *BlockerIndexer) Search(context.Context, *query.Query) ([]int64, error
 	return []int64{}, nil
 }
 
+func (idx *BlockerIndexer) PruneBlocks(from int64, to int64) error {
+	// No-op for null indexer
+	return nil
+}
+
 func (idx *BlockerIndexer) SetLogger(log.Logger) {
 }

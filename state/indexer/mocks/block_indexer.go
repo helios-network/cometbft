@@ -88,6 +88,19 @@ func (_m *BlockIndexer) SetLogger(l log.Logger) {
 	_m.Called(l)
 }
 
+func (_m *BlockIndexer) PruneBlocks(from int64, to int64) error {
+	ret := _m.Called(from, to)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int64, int64) error); ok {
+		r0 = rf(from, to)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 type mockConstructorTestingTNewBlockIndexer interface {
 	mock.TestingT
 	Cleanup(func())

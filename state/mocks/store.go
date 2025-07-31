@@ -298,6 +298,33 @@ func (_m *Store) SetOfflineStateSyncHeight(height int64) error {
 	return r0
 }
 
+// Has provides a mock function with given fields: hash
+func (_m *Store) RemoveFinalizeBlockResponse(height int64) error {
+	ret := _m.Called(height)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int64) error); ok {
+		r0 = rf(height)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+func (_m *Store) ReplaceLastFinalizeBlockResponse(height int64, response *abcitypes.ResponseFinalizeBlock) error {
+	ret := _m.Called(height, response)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int64, *abcitypes.ResponseFinalizeBlock) error); ok {
+		r0 = rf(height, response)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 type mockConstructorTestingTNewStore interface {
 	mock.TestingT
 	Cleanup(func())

@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	dbm "github.com/cometbft/cometbft-db"
-
 	"github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/state/indexer"
 	blockidxkv "github.com/cometbft/cometbft/state/indexer/block/kv"
@@ -38,7 +36,7 @@ func IndexerFromConfigWithDisabledIndexers(cfg *config.Config, dbProvider config
 			return nil, nil, false, err
 		}
 
-		return kv.NewTxIndex(store), blockidxkv.New(dbm.NewPrefixDB(store, []byte("block_events"))), false, nil
+		return kv.NewTxIndex(store), blockidxkv.NewWithDBProvider(cfg, dbProvider), false, nil
 
 	case "psql":
 		conn := cfg.TxIndex.PsqlConn

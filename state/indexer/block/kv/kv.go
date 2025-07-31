@@ -15,6 +15,7 @@ import (
 	dbm "github.com/cometbft/cometbft-db"
 
 	abci "github.com/cometbft/cometbft/abci/types"
+	"github.com/cometbft/cometbft/config"
 	idxutil "github.com/cometbft/cometbft/internal/indexer"
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/cometbft/cometbft/libs/pubsub/query"
@@ -25,6 +26,10 @@ import (
 
 var _ indexer.BlockIndexer = (*BlockerIndexer)(nil)
 
+const (
+	nsHeight = "H"
+)
+
 // BlockerIndexer implements a block indexer, indexing FinalizeBlock
 // events with an underlying KV store. Block events are indexed by their height,
 // such that matching search criteria returns the respective block height(s).
@@ -33,13 +38,27 @@ type BlockerIndexer struct {
 
 	// Add unique event identifier to use when querying
 	// Matching will be done both on height AND eventSeq
-	eventSeq int64
-	log      log.Logger
+	eventSeq   int64
+	log        log.Logger
+	dbProvider config.DBProvider
+	cfg        *config.Config
 }
 
 func New(store dbm.DB) *BlockerIndexer {
 	return &BlockerIndexer{
 		store: store,
+	}
+}
+
+func NewWithDBProvider(cfg *config.Config, dbProvider config.DBProvider) *BlockerIndexer {
+	store, err := dbProvider(&config.DBContext{ID: "event_blocks", Config: cfg})
+	if err != nil {
+		return nil
+	}
+	return &BlockerIndexer{
+		store:      store,
+		dbProvider: dbProvider,
+		cfg:        cfg,
 	}
 }
 
@@ -56,6 +75,10 @@ func (idx *BlockerIndexer) Has(height int64) (bool, error) {
 	}
 
 	return idx.store.Has(key)
+}
+
+func heightMirrorKey(height int64, eventSeq int64, attrSeq int64) ([]byte, error) {
+	return orderedcode.Append(nil, nsHeight, height, eventSeq, attrSeq)
 }
 
 // Index indexes FinalizeBlock events for a given block by its height.
@@ -250,12 +273,95 @@ FOR_LOOP:
 	return results, nil
 }
 
-// matchRange returns all matching block heights that match a given QueryRange
-// and start key. An already filtered result (filteredHeights) is provided such
-// that any non-intersecting matches are removed.
-//
-// NOTE: The provided filteredHeights may be empty if no previous condition has
-// matched.
+// PruneBlocks removes all block data for heights from `from` (inclusive) to `to` (exclusive).
+// This is used to free up disk space by removing old block data.
+func (idx *BlockerIndexer) PruneBlocks(from, to int64) error {
+	if from <= 0 || to <= 0 {
+		return fmt.Errorf("from (%d) and to (%d) must be > 0", from, to)
+	}
+	if from >= to {
+		return fmt.Errorf("from (%d) must be < to (%d)", from, to)
+	}
+
+	start, _ := orderedcode.Append(nil, nsHeight, from)
+	end, _ := orderedcode.Append(nil, nsHeight, to)
+
+	newBatch := func() dbm.Batch {
+		return idx.store.NewBatch()
+	}
+
+	batch := newBatch()
+
+	flush := func(batch dbm.Batch) error {
+		defer batch.Close()
+		err := batch.WriteSync()
+		if err != nil {
+			return fmt.Errorf("error writing batch to DB %w", err)
+		}
+		return nil
+	}
+
+	itr, err := idx.store.Iterator(start, end)
+	if err != nil {
+		return fmt.Errorf("failed to create iterator: %w", err)
+	}
+	defer itr.Close()
+
+	var pruned uint64
+	for ; itr.Valid(); itr.Next() {
+		origKey := itr.Value()
+
+		// delete the mirror key
+		if err := batch.Delete(itr.Key()); err != nil {
+			return fmt.Errorf("failed to delete mirror key: %w", err)
+		}
+
+		// delete the original event key
+		if err := batch.Delete(origKey); err != nil {
+			return fmt.Errorf("failed to delete event key: %w", err)
+		}
+
+		pruned++
+		if pruned%1000 == 0 {
+			if err := flush(batch); err != nil {
+				return err
+			}
+			batch = newBatch()
+		}
+	}
+	if err := itr.Error(); err != nil {
+		return fmt.Errorf("iterator error: %w", err)
+	}
+
+	// delete primary keys "heightKey(height)"
+	for h := from; h < to; h++ {
+		hk, err := heightKey(h)
+		if err != nil {
+			return err
+		}
+		if err := batch.Delete(hk); err != nil {
+			return err
+		}
+	}
+
+	if err := flush(batch); err != nil {
+		return err
+	}
+
+	idx.store.Close()
+	storeEventBlocks, err := idx.dbProvider(&config.DBContext{ID: "event_blocks", Config: idx.cfg})
+	if err != nil {
+		return err
+	}
+	idx.store = storeEventBlocks
+
+	if idx.log != nil {
+		idx.log.Info("pruned block index (height-first mirror)", "from", from, "to", to, "pruned_entries", pruned)
+	}
+
+	return nil
+}
+
 func (idx *BlockerIndexer) matchRange(
 	ctx context.Context,
 	qr indexer.QueryRange,
@@ -585,7 +691,7 @@ func (idx *BlockerIndexer) indexEvents(batch dbm.Batch, events []abci.Event, hei
 			continue
 		}
 
-		for _, attr := range event.Attributes {
+		for i, attr := range event.Attributes {
 			if len(attr.Key) == 0 {
 				continue
 			}
@@ -596,15 +702,27 @@ func (idx *BlockerIndexer) indexEvents(batch dbm.Batch, events []abci.Event, hei
 				return fmt.Errorf("event type and attribute key \"%s\" is reserved; please use a different key", compositeKey)
 			}
 
-			if attr.GetIndex() {
-				key, err := eventKey(compositeKey, attr.Value, height, idx.eventSeq)
-				if err != nil {
-					return fmt.Errorf("failed to create block index key: %w", err)
-				}
+			if !attr.GetIndex() {
+				continue
+			}
 
-				if err := batch.Set(key, heightBz); err != nil {
-					return err
-				}
+			// 1) normal key (search-friendly)
+			evKey, err := eventKey(compositeKey, attr.Value, height, idx.eventSeq)
+			if err != nil {
+				return fmt.Errorf("failed to create event key: %w", err)
+			}
+			if err := batch.Set(evKey, heightBz); err != nil {
+				return err
+			}
+
+			// 2) mirror key "height-first" (prune-friendly)
+			hKey, err := heightMirrorKey(height, idx.eventSeq, int64(i))
+			if err != nil {
+				return fmt.Errorf("failed to create mirror key: %w", err)
+			}
+			// store the original key in value to delete it quickly
+			if err := batch.Set(hKey, evKey); err != nil {
+				return err
 			}
 		}
 	}

@@ -30,6 +30,7 @@ func main() {
 		cmd.RollbackStateCmd,
 		cmd.CompactGoLevelDBCmd,
 		cmd.InspectCmd,
+		cmd.PruneTxIndexCmd,
 		debug.DebugCmd,
 		cli.NewCompletionCmd(rootCmd, true),
 	)

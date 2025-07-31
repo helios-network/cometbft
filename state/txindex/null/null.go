@@ -35,6 +35,11 @@ func (txi *TxIndex) Search(_ context.Context, _ *query.Query) ([]*abci.TxResult,
 	return []*abci.TxResult{}, nil
 }
 
+func (txi *TxIndex) PruneTransactionsFromTo(from int64, to int64) error {
+	// No-op for null indexer
+	return nil
+}
+
 func (txi *TxIndex) SetLogger(log.Logger) {
 
 }

@@ -215,13 +215,13 @@ func (_m *BlockStore) LoadSeenCommit(height int64) *types.Commit {
 }
 
 // PruneBlocks provides a mock function with given fields: height, _a1
-func (_m *BlockStore) PruneBlocks(height int64, _a1 state.State) (uint64, int64, error) {
+func (_m *BlockStore) PruneBlocks(height int64, _a1 state.State) (uint64, [][]byte, error) {
 	ret := _m.Called(height, _a1)
 
 	var r0 uint64
-	var r1 int64
+	var r1 [][]byte
 	var r2 error
-	if rf, ok := ret.Get(0).(func(int64, state.State) (uint64, int64, error)); ok {
+	if rf, ok := ret.Get(0).(func(int64, state.State) (uint64, [][]byte, error)); ok {
 		return rf(height, _a1)
 	}
 	if rf, ok := ret.Get(0).(func(int64, state.State) uint64); ok {
@@ -230,10 +230,10 @@ func (_m *BlockStore) PruneBlocks(height int64, _a1 state.State) (uint64, int64,
 		r0 = ret.Get(0).(uint64)
 	}
 
-	if rf, ok := ret.Get(1).(func(int64, state.State) int64); ok {
+	if rf, ok := ret.Get(1).(func(int64, state.State) [][]byte); ok {
 		r1 = rf(height, _a1)
 	} else {
-		r1 = ret.Get(1).(int64)
+		r1 = ret.Get(1).([][]byte)
 	}
 
 	if rf, ok := ret.Get(2).(func(int64, state.State) error); ok {

@@ -29,6 +29,10 @@ type TxIndexer interface {
 	// Search allows you to query for transactions.
 	Search(ctx context.Context, q *query.Query) ([]*abci.TxResult, error)
 
+	// PruneTransactionsFromTo removes all transaction data for heights from `from` (inclusive) to `to` (exclusive).
+	// This is used to free up disk space by removing old transaction data.
+	PruneTransactionsFromTo(from int64, to int64) error
+
 	//Set Logger
 	SetLogger(l log.Logger)
 }

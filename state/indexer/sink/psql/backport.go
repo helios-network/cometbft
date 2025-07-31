@@ -62,6 +62,16 @@ func (BackportTxIndexer) Search(context.Context, *query.Query) ([]*abci.TxResult
 
 func (BackportTxIndexer) SetLogger(log.Logger) {}
 
+// PruneTransactions is implemented to satisfy the TxIndexer interface, but it is not
+// supported by the psql event sink and reports an error for all inputs.
+func (BackportTxIndexer) PruneTransactions(txHashes [][]byte) error {
+	return errors.New("the TxIndexer.PruneTransactions method is not supported by the psql event sink")
+}
+
+func (BackportTxIndexer) PruneTransactionsFromTo(from int64, to int64) error {
+	return errors.New("the TxIndexer.PruneTransactionsFromTo method is not supported by the psql event sink")
+}
+
 // BlockIndexer returns a bridge that implements the CometBFT v0.34 block
 // indexer interface, using the Postgres event sink as a backing store.
 func (es *EventSink) BlockIndexer() BackportBlockIndexer {
@@ -88,6 +98,12 @@ func (b BackportBlockIndexer) Index(block types.EventDataNewBlockEvents) error {
 // supported by the psql event sink and reports an error for all inputs.
 func (BackportBlockIndexer) Search(context.Context, *query.Query) ([]int64, error) {
 	return nil, errors.New("the BlockIndexer.Search method is not supported")
+}
+
+// PruneBlocks is implemented to satisfy the BlockIndexer interface, but it is not
+// supported by the psql event sink and reports an error for all inputs.
+func (BackportBlockIndexer) PruneBlocks(from int64, to int64) error {
+	return errors.New("the BlockIndexer.PruneBlocks method is not supported by the psql event sink")
 }
 
 func (BackportBlockIndexer) SetLogger(log.Logger) {}

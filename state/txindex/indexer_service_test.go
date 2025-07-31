@@ -31,7 +31,7 @@ func TestIndexerServiceIndexesBlocks(t *testing.T) {
 	// tx indexer
 	store := db.NewMemDB()
 	txIndexer := kv.NewTxIndex(store)
-	blockIndexer := blockidxkv.New(db.NewPrefixDB(store, []byte("block_events")))
+	blockIndexer := blockidxkv.New(db.NewPrefixDB(store, []byte("be:")))
 
 	service := txindex.NewIndexerService(txIndexer, blockIndexer, eventBus, false)
 	service.SetLogger(log.TestingLogger())

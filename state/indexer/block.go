@@ -23,5 +23,9 @@ type BlockIndexer interface {
 	// event search criteria.
 	Search(ctx context.Context, q *query.Query) ([]int64, error)
 
+	// PruneBlocks removes all block data for heights from `from` (inclusive) to `to` (exclusive).
+	// This is used to free up disk space by removing old block data.
+	PruneBlocks(from int64, to int64) error
+
 	SetLogger(l log.Logger)
 }

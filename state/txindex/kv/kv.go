@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -85,11 +86,25 @@ func (txi *TxIndex) AddBatch(b *txindex.Batch) error {
 	storeBatch := txi.store.NewBatch()
 	defer storeBatch.Close()
 
+	mapOfTxIndexKey := make(map[int64][]TxIndexKey)
+
 	for _, result := range b.Ops {
 		hash := types.Tx(result.Tx).Hash()
 
+		baseEventSeq := txi.eventSeq
+
+		complementaryTxIndexKeys := make([]TxIndexKey, 0)
+		if _, ok := mapOfTxIndexKey[result.Height]; ok {
+			complementaryTxIndexKeys = mapOfTxIndexKey[result.Height]
+		}
+		txIndexKeyArray, err := txi.indexHeight(result, hash, storeBatch, baseEventSeq, complementaryTxIndexKeys)
+		if err != nil {
+			return err
+		}
+		mapOfTxIndexKey[result.Height] = txIndexKeyArray
+
 		// index tx by events
-		err := txi.indexEvents(result, hash, storeBatch)
+		err = txi.indexEvents(result, hash, storeBatch)
 		if err != nil {
 			return err
 		}
@@ -112,6 +127,11 @@ func (txi *TxIndex) AddBatch(b *txindex.Batch) error {
 	}
 
 	return storeBatch.WriteSync()
+}
+
+type TxIndexKey struct {
+	KH       []byte
+	EventSeq int64
 }
 
 // Index indexes a single transaction using the given list of events. Each key
@@ -142,14 +162,21 @@ func (txi *TxIndex) Index(result *abci.TxResult) error {
 		}
 	}
 
-	// index tx by events
-	err := txi.indexEvents(result, hash, b)
+	baseEventSeq := txi.eventSeq
+	_, err := txi.indexHeight(result, hash, b, baseEventSeq, make([]TxIndexKey, 0))
 	if err != nil {
 		return err
 	}
 
+	// index tx by events
+	err = txi.indexEvents(result, hash, b)
+	if err != nil {
+		return err
+	}
+
+	KH := keyForHeight(result)
 	// index by height (always)
-	err = b.Set(keyForHeight(result), hash)
+	err = b.Set(KH, hash)
 	if err != nil {
 		return err
 	}
@@ -165,6 +192,44 @@ func (txi *TxIndex) Index(result *abci.TxResult) error {
 	}
 
 	return b.WriteSync()
+}
+
+func (txi *TxIndex) indexHeight(result *abci.TxResult, hash []byte, store dbm.Batch, baseEventSeq int64, complementaryTxIndexKeys []TxIndexKey) ([]TxIndexKey, error) {
+	///////////////////////////////////////////////////////
+	// index by height and eventSeq
+	///////////////////////////////////////////////////////
+	key := []byte(fmt.Sprintf("H:%d", result.Height))
+	has, _ := txi.store.Has(key)
+
+	arrayOfTxIndexKey := make([]TxIndexKey, 0)
+	if has {
+		var arr []TxIndexKey
+		rawValue, err := txi.store.Get(key)
+		if err != nil {
+			return nil, err
+		}
+		err = json.Unmarshal(rawValue, &arr)
+		if err != nil {
+			return nil, err
+		}
+		arrayOfTxIndexKey = append(arrayOfTxIndexKey, arr...)
+	}
+	arrayOfTxIndexKey = append(arrayOfTxIndexKey, complementaryTxIndexKeys...)
+	arrayOfTxIndexKey = append(arrayOfTxIndexKey, TxIndexKey{
+		KH:       hash, // Stocker le hash de la transaction, pas la clé de hauteur
+		EventSeq: baseEventSeq,
+	})
+	rawValue, err := json.Marshal(arrayOfTxIndexKey)
+	if err != nil {
+		return nil, err
+	}
+	// index keyForHeight and baseEventSeq
+	err = store.Set(key, rawValue)
+	if err != nil {
+		return nil, err
+	}
+	///////////////////////////////////////////////////////
+	return arrayOfTxIndexKey, nil
 }
 
 func (txi *TxIndex) indexEvents(result *abci.TxResult, hash []byte, store dbm.Batch) error {
@@ -196,6 +261,35 @@ func (txi *TxIndex) indexEvents(result *abci.TxResult, hash []byte, store dbm.Ba
 	}
 
 	return nil
+}
+
+func (txi *TxIndex) getKeysOfEventsFor(result *abci.TxResult, eventSeq int64) ([][]byte, error) {
+	keys := make([][]byte, 0)
+	for _, event := range result.Result.Events {
+		eventSeq = eventSeq + 1
+		// only index events with a non-empty type
+		if len(event.Type) == 0 {
+			continue
+		}
+
+		for _, attr := range event.Attributes {
+			if len(attr.Key) == 0 {
+				continue
+			}
+			// index if `index: true` is set
+			compositeTag := fmt.Sprintf("%s.%s", event.Type, attr.Key)
+			// ensure event does not conflict with a reserved prefix key
+			if compositeTag == types.TxHashKey || compositeTag == types.TxHeightKey {
+				return nil, fmt.Errorf("event type and attribute key \"%s\" is reserved; please use a different key", compositeTag)
+			}
+			if attr.GetIndex() {
+				key := keyForEvent(compositeTag, attr.Value, result, eventSeq)
+				keys = append(keys, key)
+			}
+		}
+	}
+
+	return keys, nil
 }
 
 // Search performs a search using the given query.
@@ -328,6 +422,124 @@ RESULTS_LOOP:
 	}
 
 	return results, nil
+}
+
+func (txi *TxIndex) PruneTransactionsFromTo(from int64, to int64) error {
+	if from <= 0 || to <= 0 {
+		return fmt.Errorf("from (%d) and to (%d) must be > 0", from, to)
+	}
+	if from >= to {
+		return fmt.Errorf("from (%d) must be < to (%d)", from, to)
+	}
+
+	start := []byte(fmt.Sprintf("H:%d", from))
+	end := []byte(fmt.Sprintf("H:%d", to+1))
+
+	// start := []byte(fmt.Sprintf("%s/%d/", types.TxHeightKey, 1))
+	// end := []byte(fmt.Sprintf("%s/%d/", types.TxHeightKey, to))
+
+	itr, err := txi.store.Iterator(start, end)
+	if err != nil {
+		return fmt.Errorf("failed to create iterator: %w", err)
+	}
+	defer itr.Close()
+
+	pruned := uint64(0)
+	eventsPruned := uint64(0)
+	newBatch := func() dbm.Batch {
+		return txi.store.NewBatch()
+	}
+
+	batch := newBatch()
+
+	flush := func(batch dbm.Batch) error {
+		defer batch.Close()
+		err := batch.WriteSync()
+		if err != nil {
+			return fmt.Errorf("error writing batch to DB %w", err)
+		}
+		return nil
+	}
+
+	for ; itr.Valid(); itr.Next() {
+
+		txIndexKeyArray := []TxIndexKey{}
+		err := json.Unmarshal(itr.Value(), &txIndexKeyArray)
+		if err != nil {
+			txi.log.Error("failed to unmarshal tx index key", "err", err)
+			continue
+		}
+
+		// remove height index
+		if err := batch.Delete(itr.Key()); err != nil {
+			txi.log.Error("failed to delete height key", "key", itr.Key(), "err", err)
+			continue
+		}
+
+		for _, txIndexKey := range txIndexKeyArray {
+			txHash := txIndexKey.KH // txIndexKey.KH contient déjà le hash de la transaction
+
+			// On délègue à la logique existante de prune par hash
+			txResult, err := txi.Get(txHash)
+			if err != nil {
+				txi.log.Error("failed to get tx result", "hash", txHash, "err", err)
+				continue
+			}
+
+			// remove tx result
+			if err := batch.Delete(txHash); err != nil {
+				txi.log.Error("failed to delete tx result", "hash", txHash, "err", err)
+				continue
+			}
+
+			// remove height index (KH est maintenant le hash, il faut supprimer la clé de hauteur)
+			heightKey := keyForHeight(txResult)
+			if err := batch.Delete(heightKey); err != nil {
+				txi.log.Error("failed to delete height key", "key", heightKey, "err", err)
+				continue
+			}
+
+			// remove event index
+			keys, err := txi.getKeysOfEventsFor(txResult, txIndexKey.EventSeq)
+			if err != nil {
+				txi.log.Error("failed to get event keys", "err", err)
+				continue
+			}
+			for _, key := range keys {
+				if err := batch.Delete(key); err != nil {
+					txi.log.Error("failed to delete event key", "key", key, "err", err)
+					continue
+				}
+				eventsPruned++
+			}
+			pruned++
+
+			if pruned%1000 == 0 {
+				if err := flush(batch); err != nil {
+					return err
+				}
+				batch = newBatch()
+			}
+		}
+	}
+	if err := itr.Error(); err != nil {
+		return fmt.Errorf("iterator error: %w", err)
+	}
+
+	if err := flush(batch); err != nil {
+		return err
+	}
+
+	if txi.log != nil {
+		txi.log.Info("pruned tx index from-to",
+			"from_height", from,
+			"to_height", to,
+			"pruned_entries", pruned,
+			"events_pruned", eventsPruned,
+		)
+	}
+
+	return nil
 }
 
 func lookForHash(conditions []syntax.Condition) (hash []byte, ok bool, err error) {

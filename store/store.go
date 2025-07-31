@@ -342,24 +342,27 @@ func (bs *BlockStore) LoadSeenCommit(height int64) *types.Commit {
 	return commit.Clone()
 }
 
-// PruneBlocks removes block up to (but not including) a height. It returns number of blocks pruned and the evidence retain height - the height at which data needed to prove evidence must not be removed.
-func (bs *BlockStore) PruneBlocks(height int64, state sm.State) (uint64, error) {
+// PruneBlocks removes block up to (but not including) a height. It returns number of blocks pruned,
+// the list of transaction hashes that were pruned, and the evidence retain height - the height at which
+// data needed to prove evidence must not be removed.
+func (bs *BlockStore) PruneBlocks(height int64, state sm.State) (uint64, [][]byte, error) {
 	if height <= 0 {
-		return 0, fmt.Errorf("height must be greater than 0")
+		return 0, nil, fmt.Errorf("height must be greater than 0")
 	}
 	bs.mtx.RLock()
 	if height > bs.height {
 		bs.mtx.RUnlock()
-		return 0, fmt.Errorf("cannot prune beyond the latest height %v", bs.height)
+		return 0, nil, fmt.Errorf("cannot prune beyond the latest height %v", bs.height)
 	}
 	base := bs.base
 	bs.mtx.RUnlock()
 	if height < base {
-		return 0, fmt.Errorf("cannot prune to height %v, it is lower than base height %v",
+		return 0, nil, fmt.Errorf("cannot prune to height %v, it is lower than base height %v",
 			height, base)
 	}
 
 	pruned := uint64(0)
+	var prunedTxHashes [][]byte
 	batch := bs.db.NewBatch()
 	defer batch.Close()
 	flush := func(batch dbm.Batch, base int64) error {
@@ -379,24 +382,33 @@ func (bs *BlockStore) PruneBlocks(height int64, state sm.State) (uint64, error) 
 			continue
 		}
 
+		// Load the block to get transaction hashes
+		block := bs.LoadBlock(h)
+		if block != nil {
+			// Extract transaction hashes from the block
+			for _, tx := range block.Data.Txs {
+				prunedTxHashes = append(prunedTxHashes, tx.Hash())
+			}
+		}
+
 		if err := batch.Delete(calcBlockMetaKey(h)); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		if err := batch.Delete(calcBlockHashKey(meta.BlockID.Hash)); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		if err := batch.Delete(calcBlockCommitKey(h)); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		if err := batch.Delete(calcExtCommitKey(h)); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		if err := batch.Delete(calcSeenCommitKey(h)); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		for p := 0; p < int(meta.BlockID.PartSetHeader.Total); p++ {
 			if err := batch.Delete(calcBlockPartKey(h, p)); err != nil {
-				return 0, err
+				return 0, nil, err
 			}
 		}
 		pruned++
@@ -405,7 +417,7 @@ func (bs *BlockStore) PruneBlocks(height int64, state sm.State) (uint64, error) 
 		if pruned%1000 == 0 && pruned > 0 {
 			err := flush(batch, h)
 			if err != nil {
-				return 0, err
+				return 0, nil, err
 			}
 			batch = bs.db.NewBatch()
 			defer batch.Close()
@@ -414,10 +426,10 @@ func (bs *BlockStore) PruneBlocks(height int64, state sm.State) (uint64, error) 
 
 	err := flush(batch, height)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
-	return pruned, nil
+	return pruned, prunedTxHashes, nil
 }
 
 // SaveBlock persists the given block, blockParts, and seenCommit to the underlying db.

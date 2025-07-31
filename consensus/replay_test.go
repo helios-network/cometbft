@@ -702,7 +702,7 @@ func testHandshakeReplay(t *testing.T, config *cfg.Config, nBlocks int, mode uin
 	// Prune block store if requested
 	expectError := false
 	if mode == 3 {
-		pruned, err := store.PruneBlocks(2, state)
+		pruned, _, err := store.PruneBlocks(2, state)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, pruned)
 		expectError = int64(nBlocks) < 2
@@ -1216,7 +1216,7 @@ func (bs *mockBlockStore) LoadBlockExtendedCommit(height int64) *types.ExtendedC
 	return bs.extCommits[height-1]
 }
 
-func (bs *mockBlockStore) PruneBlocks(height int64, _ sm.State) (uint64, error) {
+func (bs *mockBlockStore) PruneBlocks(height int64, _ sm.State) (uint64, [][]byte, error) {
 	pruned := uint64(0)
 	for i := int64(0); i < height-1; i++ {
 		bs.chain[i] = nil
@@ -1224,7 +1224,7 @@ func (bs *mockBlockStore) PruneBlocks(height int64, _ sm.State) (uint64, error) 
 		pruned++
 	}
 	bs.base = height
-	return pruned, nil
+	return pruned, nil, nil
 }
 
 func (bs *mockBlockStore) DeleteLatestBlock() error { return nil }

@@ -16,7 +16,7 @@ import (
 )
 
 func TestBlockIndexer(t *testing.T) {
-	store := db.NewPrefixDB(db.NewMemDB(), []byte("block_events"))
+	store := db.NewPrefixDB(db.NewMemDB(), []byte("be:"))
 	indexer := blockidxkv.New(store)
 
 	require.NoError(t, indexer.Index(types.EventDataNewBlockEvents{
@@ -143,7 +143,7 @@ func TestBlockIndexer(t *testing.T) {
 }
 
 func TestBlockIndexerMulti(t *testing.T) {
-	store := db.NewPrefixDB(db.NewMemDB(), []byte("block_events"))
+	store := db.NewPrefixDB(db.NewMemDB(), []byte("be:"))
 	indexer := blockidxkv.New(store)
 
 	require.NoError(t, indexer.Index(types.EventDataNewBlockEvents{
@@ -307,7 +307,7 @@ func TestBigInt(t *testing.T) {
 	bigFloat := bigInt + ".76"
 	bigFloatLower := bigInt + ".1"
 	bigIntSmaller := "9999999999999999999"
-	store := db.NewPrefixDB(db.NewMemDB(), []byte("block_events"))
+	store := db.NewPrefixDB(db.NewMemDB(), []byte("be:"))
 	indexer := blockidxkv.New(store)
 
 	require.NoError(t, indexer.Index(types.EventDataNewBlockEvents{

@@ -484,7 +484,7 @@ func TestLoadBaseMeta(t *testing.T) {
 		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
 	}
 
-	_, err = bs.PruneBlocks(4, state)
+	_, _, err = bs.PruneBlocks(4, state)
 	require.NoError(t, err)
 
 	baseBlock := bs.LoadBaseMeta()
@@ -559,10 +559,10 @@ func TestPruneBlocks(t *testing.T) {
 	assert.EqualValues(t, 0, bs.Size())
 
 	// pruning an empty store should error, even when pruning to 0
-	_, err = bs.PruneBlocks(1, state)
+	_, _, err = bs.PruneBlocks(1, state)
 	require.Error(t, err)
 
-	_, err = bs.PruneBlocks(0, state)
+	_, _, err = bs.PruneBlocks(0, state)
 	require.Error(t, err)
 
 	// make more than 1000 blocks, to test batch deletions
@@ -585,7 +585,7 @@ func TestPruneBlocks(t *testing.T) {
 	state.ConsensusParams.Evidence.MaxAgeDuration = 1 * time.Second
 
 	// Check that basic pruning works
-	pruned, err := bs.PruneBlocks(1200, state)
+	pruned, _, err := bs.PruneBlocks(1200, state)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1199, pruned)
 	assert.EqualValues(t, 1200, bs.Base())
@@ -610,16 +610,16 @@ func TestPruneBlocks(t *testing.T) {
 	}
 
 	// Pruning below the current base should error
-	_, err = bs.PruneBlocks(1199, state)
+	_, _, err = bs.PruneBlocks(1199, state)
 	require.Error(t, err)
 
 	// Pruning to the current base should work
-	pruned, err = bs.PruneBlocks(1200, state)
+	pruned, _, err = bs.PruneBlocks(1200, state)
 	require.NoError(t, err)
 	assert.EqualValues(t, 0, pruned)
 
 	// Pruning again should work
-	pruned, err = bs.PruneBlocks(1300, state)
+	pruned, _, err = bs.PruneBlocks(1300, state)
 	require.NoError(t, err)
 	assert.EqualValues(t, 100, pruned)
 	assert.EqualValues(t, 1300, bs.Base())
@@ -632,11 +632,11 @@ func TestPruneBlocks(t *testing.T) {
 	require.Nil(t, bs.LoadBlockCommit(1099))
 
 	// Pruning beyond the current height should error
-	_, err = bs.PruneBlocks(1501, state)
+	_, _, err = bs.PruneBlocks(1501, state)
 	require.Error(t, err)
 
 	// Pruning to the current height should work
-	pruned, err = bs.PruneBlocks(1500, state)
+	pruned, _, err = bs.PruneBlocks(1500, state)
 	require.NoError(t, err)
 	assert.EqualValues(t, 200, pruned)
 	assert.Nil(t, bs.LoadBlock(1499))
