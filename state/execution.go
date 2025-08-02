@@ -361,12 +361,12 @@ func (blockExec *BlockExecutor) applyBlock(state State, blockID types.BlockID, b
 
 	fail.Fail() // XXX
 	// Prune old heights, if requested by ABCI app.
-	if retainHeight > 0 {
+	if types.GetRetainHeightWithoutFlags(retainHeight) > 0 || types.IsRetainHeightArchive(retainHeight) {
 		pruned, err := blockExec.pruneBlocks(retainHeight, state)
 		if err != nil {
-			blockExec.logger.Error("failed to prune blocks", "retain_height", retainHeight, "err", err)
+			blockExec.logger.Error("failed to prune blocks", "archive", types.IsRetainHeightArchive(retainHeight), "retain_height", types.GetRetainHeightWithoutFlags(retainHeight), "err", err)
 		} else {
-			blockExec.logger.Debug("pruned blocks", "pruned", pruned, "retain_height", retainHeight)
+			blockExec.logger.Debug("pruned blocks", "archive", types.IsRetainHeightArchive(retainHeight), "pruned", pruned, "retain_height", types.GetRetainHeightWithoutFlags(retainHeight))
 		}
 	}
 
@@ -863,39 +863,83 @@ func ExecCommitBlock(
 
 func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64, state State) (uint64, error) {
 	base := blockExec.blockStore.Base()
+	currentHeight := blockExec.blockStore.Height()
+	isArchive := types.IsRetainHeightArchive(retainHeight)
+	retainHeightNumber := types.GetRetainHeightWithoutFlags(retainHeight)
+
 	if retainHeight <= base {
 		return 0, nil
 	}
 
-	amountPruned, _, err := blockExec.blockStore.PruneBlocks(retainHeight, state)
-	if err != nil {
-		return 0, fmt.Errorf("failed to prune block store: %w", err)
+	amountPruned := uint64(0)
+
+	if !isArchive {
+		amountPrunedBlocks, _, err := blockExec.blockStore.PruneBlocks(retainHeightNumber, state)
+		if err != nil {
+			return 0, fmt.Errorf("failed to prune block store: %w", err)
+		}
+		amountPruned = amountPrunedBlocks
 	}
 
-	err = blockExec.Store().PruneStates(base, retainHeight, retainHeight+1)
-	if err != nil {
-		return 0, fmt.Errorf("failed to prune state store: %w", err)
+	// Define storage range possible for the state (max 100 blocks, min 10 blocks)
+	maxHeightStateToRetain := currentHeight - 100
+	minHeightStateToRetain := currentHeight - 10
+	heightStateToRetain := retainHeightNumber
+	if heightStateToRetain < maxHeightStateToRetain {
+		heightStateToRetain = maxHeightStateToRetain
+	} else if heightStateToRetain > minHeightStateToRetain {
+		heightStateToRetain = minHeightStateToRetain
+	}
+
+	if heightStateToRetain > base {
+		// Prune the state store
+		err := blockExec.Store().PruneStates(base, heightStateToRetain, heightStateToRetain+1)
+		if err != nil {
+			return 0, fmt.Errorf("failed to prune state store: %w", err)
+		}
 	}
 
 	// Prune transaction indexer if available
 	if blockExec.txIndexer != nil {
-		err = blockExec.txIndexer.PruneTransactionsFromTo(base, retainHeight)
-		if err != nil {
-			blockExec.logger.Error("failed to prune transaction indexer", "err", err)
-			// Don't fail the entire pruning process if tx indexer pruning fails
-		} else {
-			blockExec.logger.Debug("pruned transaction indexer", "from_height", base, "to_height", retainHeight)
+		// Define storage range possible for the transaction indexer (max 172800 blocks (1 month), min 10 blocks)
+		maxHeightTxIndexerToRetain := currentHeight - 172800
+		minHeightTxIndexerToRetain := currentHeight - 10
+		heightTxIndexerToRetain := retainHeightNumber
+		if heightTxIndexerToRetain < maxHeightTxIndexerToRetain {
+			heightTxIndexerToRetain = maxHeightTxIndexerToRetain
+		} else if heightTxIndexerToRetain > minHeightTxIndexerToRetain {
+			heightTxIndexerToRetain = minHeightTxIndexerToRetain
+		}
+		if heightTxIndexerToRetain > base {
+			err := blockExec.txIndexer.PruneTransactionsFromTo(base, heightTxIndexerToRetain)
+			if err != nil {
+				blockExec.logger.Error("failed to prune transaction indexer", "err", err)
+				// Don't fail the entire pruning process if tx indexer pruning fails
+			} else {
+				blockExec.logger.Debug("pruned transaction indexer", "from_height", base, "to_height", retainHeightNumber)
+			}
 		}
 	}
 
 	// Prune block indexer if available
 	if blockExec.blockIndexer != nil {
-		err = blockExec.blockIndexer.PruneBlocks(base, retainHeight)
-		if err != nil {
-			blockExec.logger.Error("failed to prune block indexer", "err", err)
-			// Don't fail the entire pruning process if block indexer pruning fails
-		} else {
-			blockExec.logger.Debug("pruned block indexer", "from_height", base, "to_height", retainHeight)
+		// Define storage range possible for the block indexer (max 5760 blocks (1 day), min 10 blocks)
+		maxHeightBlockIndexerToRetain := currentHeight - 5760
+		minHeightBlockIndexerToRetain := currentHeight - 10
+		heightBlockIndexerToRetain := retainHeightNumber
+		if heightBlockIndexerToRetain < maxHeightBlockIndexerToRetain {
+			heightBlockIndexerToRetain = maxHeightBlockIndexerToRetain
+		} else if heightBlockIndexerToRetain > minHeightBlockIndexerToRetain {
+			heightBlockIndexerToRetain = minHeightBlockIndexerToRetain
+		}
+		if heightBlockIndexerToRetain > base {
+			err := blockExec.blockIndexer.PruneBlocks(base, heightBlockIndexerToRetain)
+			if err != nil {
+				blockExec.logger.Error("failed to prune block indexer", "err", err)
+				// Don't fail the entire pruning process if block indexer pruning fails
+			} else {
+				blockExec.logger.Debug("pruned block indexer", "from_height", base, "to_height", retainHeightNumber)
+			}
 		}
 	}
 
