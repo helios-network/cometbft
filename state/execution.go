@@ -881,8 +881,8 @@ func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64, state State) (ui
 		amountPruned = amountPrunedBlocks
 	}
 
-	// Define storage range possible for the state (max 100 blocks, min 10 blocks)
-	maxHeightStateToRetain := currentHeight - 100
+	// Define storage range possible for the state (max 172800 blocks (1 month), min 10 blocks)
+	maxHeightStateToRetain := currentHeight - 172800
 	minHeightStateToRetain := currentHeight - 10
 	heightStateToRetain := retainHeightNumber
 	if heightStateToRetain < maxHeightStateToRetain {
