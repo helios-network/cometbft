@@ -31,6 +31,7 @@ func main() {
 		cmd.CompactGoLevelDBCmd,
 		cmd.InspectCmd,
 		cmd.PruneTxIndexCmd,
+		cmd.PruneBlockByBlockCmd,
 		debug.DebugCmd,
 		cli.NewCompletionCmd(rootCmd, true),
 	)

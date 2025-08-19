@@ -27,7 +27,7 @@ type BlockStore interface {
 	SaveBlock(block *types.Block, blockParts *types.PartSet, seenCommit *types.Commit)
 	SaveBlockWithExtendedCommit(block *types.Block, blockParts *types.PartSet, seenCommit *types.ExtendedCommit)
 
-	PruneBlocks(height int64, state State) (uint64, [][]byte, error)
+	PruneBlocks(height int64, state State) (uint64, [][]byte, int64, error)
 
 	LoadBlockByHash(hash []byte) *types.Block
 	LoadBlockMetaByHash(hash []byte) *types.BlockMeta

@@ -486,6 +486,10 @@ func (txi *TxIndex) PruneTransactionsFromTo(from int64, to int64) error {
 				continue
 			}
 
+			if txResult == nil {
+				continue
+			}
+
 			// remove tx result
 			if err := batch.Delete(txHash); err != nil {
 				txi.log.Error("failed to delete tx result", "hash", txHash, "err", err)

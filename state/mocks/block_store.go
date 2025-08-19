@@ -215,13 +215,14 @@ func (_m *BlockStore) LoadSeenCommit(height int64) *types.Commit {
 }
 
 // PruneBlocks provides a mock function with given fields: height, _a1
-func (_m *BlockStore) PruneBlocks(height int64, _a1 state.State) (uint64, [][]byte, error) {
+func (_m *BlockStore) PruneBlocks(height int64, _a1 state.State) (uint64, [][]byte, int64, error) {
 	ret := _m.Called(height, _a1)
 
 	var r0 uint64
 	var r1 [][]byte
+	var r3 int64
 	var r2 error
-	if rf, ok := ret.Get(0).(func(int64, state.State) (uint64, [][]byte, error)); ok {
+	if rf, ok := ret.Get(0).(func(int64, state.State) (uint64, [][]byte, int64, error)); ok {
 		return rf(height, _a1)
 	}
 	if rf, ok := ret.Get(0).(func(int64, state.State) uint64); ok {
@@ -242,7 +243,13 @@ func (_m *BlockStore) PruneBlocks(height int64, _a1 state.State) (uint64, [][]by
 		r2 = ret.Error(2)
 	}
 
-	return r0, r1, r2
+	if rf, ok := ret.Get(3).(func(int64, state.State) int64); ok {
+		r3 = rf(height, _a1)
+	} else {
+		r3 = ret.Get(3).(int64)
+	}
+
+	return r0, r1, r3, r2
 }
 
 // SaveBlock provides a mock function with given fields: block, blockParts, seenCommit

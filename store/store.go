@@ -10,6 +10,7 @@ import (
 
 	dbm "github.com/cometbft/cometbft-db"
 
+	"github.com/cometbft/cometbft/evidence"
 	cmtsync "github.com/cometbft/cometbft/libs/sync"
 	cmtstore "github.com/cometbft/cometbft/proto/tendermint/store"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
@@ -345,20 +346,23 @@ func (bs *BlockStore) LoadSeenCommit(height int64) *types.Commit {
 // PruneBlocks removes block up to (but not including) a height. It returns number of blocks pruned,
 // the list of transaction hashes that were pruned, and the evidence retain height - the height at which
 // data needed to prove evidence must not be removed.
-func (bs *BlockStore) PruneBlocks(height int64, state sm.State) (uint64, [][]byte, error) {
+func (bs *BlockStore) PruneBlocks(height int64, state sm.State) (uint64, [][]byte, int64, error) {
 	if height <= 0 {
-		return 0, nil, fmt.Errorf("height must be greater than 0")
+		return 0, nil, -1, fmt.Errorf("height must be greater than 0")
 	}
 	bs.mtx.RLock()
 	if height > bs.height {
 		bs.mtx.RUnlock()
-		return 0, nil, fmt.Errorf("cannot prune beyond the latest height %v", bs.height)
+		return 0, nil, -1, fmt.Errorf("cannot prune beyond the latest height %v", bs.height)
 	}
 	base := bs.base
+	saveNewBase := true
 	bs.mtx.RUnlock()
 	if height < base {
-		return 0, nil, fmt.Errorf("cannot prune to height %v, it is lower than base height %v",
-			height, base)
+		base = height // set base to height to avoid panic
+		saveNewBase = false
+		// return 0, nil, -1, fmt.Errorf("cannot prune to height %v, it is lower than base height %v",
+		// 	height, base)
 	}
 
 	pruned := uint64(0)
@@ -371,15 +375,25 @@ func (bs *BlockStore) PruneBlocks(height int64, state sm.State) (uint64, [][]byt
 		bs.mtx.Lock()
 		defer batch.Close()
 		defer bs.mtx.Unlock()
-		bs.base = base
+		if saveNewBase {
+			bs.base = base
+		}
 		return bs.saveStateAndWriteDB(batch, "failed to prune")
 	}
 
+	evidencePoint := height
 	for h := base; h < height; h++ {
 
 		meta := bs.LoadBlockMeta(h)
 		if meta == nil { // assume already deleted
 			continue
+		}
+
+		// This logic is in place to protect data that proves malicious behavior.
+		// If the height is within the evidence age, we continue to persist the header and commit data.
+
+		if evidencePoint == height && !evidence.IsEvidenceExpired(state.LastBlockHeight, state.LastBlockTime, h, meta.Header.Time, state.ConsensusParams.Evidence) {
+			evidencePoint = h
 		}
 
 		// Load the block to get transaction hashes
@@ -391,24 +405,30 @@ func (bs *BlockStore) PruneBlocks(height int64, state sm.State) (uint64, [][]byt
 			}
 		}
 
-		if err := batch.Delete(calcBlockMetaKey(h)); err != nil {
-			return 0, nil, err
+		// if height is beyond the evidence point we dont delete the header
+		if h < evidencePoint {
+			if err := batch.Delete(calcBlockMetaKey(h)); err != nil {
+				return 0, nil, -1, err
+			}
 		}
 		if err := batch.Delete(calcBlockHashKey(meta.BlockID.Hash)); err != nil {
-			return 0, nil, err
+			return 0, nil, -1, err
 		}
-		if err := batch.Delete(calcBlockCommitKey(h)); err != nil {
-			return 0, nil, err
+		// if height is beyond the evidence point we dont delete the commit data
+		if h < evidencePoint {
+			if err := batch.Delete(calcBlockCommitKey(h)); err != nil {
+				return 0, nil, -1, err
+			}
 		}
 		if err := batch.Delete(calcExtCommitKey(h)); err != nil {
-			return 0, nil, err
+			return 0, nil, -1, err
 		}
 		if err := batch.Delete(calcSeenCommitKey(h)); err != nil {
-			return 0, nil, err
+			return 0, nil, -1, err
 		}
 		for p := 0; p < int(meta.BlockID.PartSetHeader.Total); p++ {
 			if err := batch.Delete(calcBlockPartKey(h, p)); err != nil {
-				return 0, nil, err
+				return 0, nil, -1, err
 			}
 		}
 		pruned++
@@ -417,7 +437,7 @@ func (bs *BlockStore) PruneBlocks(height int64, state sm.State) (uint64, [][]byt
 		if pruned%1000 == 0 && pruned > 0 {
 			err := flush(batch, h)
 			if err != nil {
-				return 0, nil, err
+				return 0, nil, -1, err
 			}
 			batch = bs.db.NewBatch()
 			defer batch.Close()
@@ -426,10 +446,10 @@ func (bs *BlockStore) PruneBlocks(height int64, state sm.State) (uint64, [][]byt
 
 	err := flush(batch, height)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, -1, err
 	}
 
-	return pruned, prunedTxHashes, nil
+	return pruned, prunedTxHashes, evidencePoint, nil
 }
 
 // SaveBlock persists the given block, blockParts, and seenCommit to the underlying db.

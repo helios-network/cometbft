@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -281,6 +282,134 @@ func (wal *BaseWAL) SearchForEndHeight(
 	}
 
 	return nil, false, nil
+}
+
+// PruneWALFiles removes WAL files that contain data up to the specified height.
+// This function should be called when the node is stopped to avoid conflicts.
+func PruneWALFiles(walPath string, upToHeight int64) error {
+	// Open the WAL to access its group
+	wal, err := NewWAL(walPath)
+	if err != nil {
+		return fmt.Errorf("failed to open WAL: %w", err)
+	}
+	defer func() {
+		wal.Stop()
+	}()
+
+	// Get the group from the WAL
+	baseWAL := wal
+
+	// Find the last height in the WAL
+	lastHeight := int64(-1)
+	min, max := baseWAL.group.MinIndex(), baseWAL.group.MaxIndex()
+
+	// Search for the highest height in the WAL
+	for index := max; index >= min; index-- {
+		gr, err := baseWAL.group.NewReader(index)
+		if err != nil {
+			continue
+		}
+
+		dec := NewWALDecoder(gr)
+		iterationCount := 0
+		maxIterations := 10000 // Protection contre les boucles infinies
+		for {
+			iterationCount++
+			if iterationCount > maxIterations {
+				break
+			}
+
+			msg, err := dec.Decode()
+			if err == io.EOF {
+				gr.Close()
+				break
+			}
+			if err != nil {
+				gr.Close()
+				continue
+			}
+
+			if m, ok := msg.Msg.(EndHeightMessage); ok {
+				if m.Height > lastHeight {
+					lastHeight = m.Height
+				}
+			}
+		}
+		gr.Close()
+	}
+
+	if lastHeight == -1 {
+		return nil
+	}
+
+	// If the last height is less than or equal to upToHeight, we can remove all files
+	if lastHeight <= upToHeight {
+		// Remove all WAL files except the current head
+		for index := min; index < max; index++ {
+			pathToRemove := fmt.Sprintf("%v.%03d", baseWAL.group.Head.Path, index)
+			if err := os.Remove(pathToRemove); err != nil {
+				// Log the error but continue with other files
+			}
+		}
+		return nil
+	}
+
+	// Find the first file that contains data beyond upToHeight
+	targetIndex := -1
+	for index := min; index <= max; index++ {
+		gr, err := baseWAL.group.NewReader(index)
+		if err != nil {
+			continue
+		}
+
+		dec := NewWALDecoder(gr)
+		fileContainsTargetHeight := false
+		iterationCount := 0
+		maxIterations := 10000 // Protection contre les boucles infinies
+		for {
+			iterationCount++
+			if iterationCount > maxIterations {
+				break
+			}
+
+			msg, err := dec.Decode()
+			if err == io.EOF {
+				gr.Close()
+				break
+			}
+			if err != nil {
+				gr.Close()
+				break
+			}
+
+			if m, ok := msg.Msg.(EndHeightMessage); ok {
+				if m.Height > upToHeight {
+					fileContainsTargetHeight = true
+					break
+				}
+			}
+		}
+		gr.Close()
+
+		if fileContainsTargetHeight {
+			targetIndex = index
+			break
+		}
+	}
+
+	if targetIndex == -1 {
+		return fmt.Errorf("could not find WAL file containing height %d", upToHeight)
+	}
+
+	// Remove all files before targetIndex
+	for index := min; index < targetIndex; index++ {
+		pathToRemove := fmt.Sprintf("%v.%03d", baseWAL.group.Head.Path, index)
+		if err := os.Remove(pathToRemove); err != nil {
+			// Log the error but continue with other files
+		}
+	}
+
+	return nil
 }
 
 // A WALEncoder writes custom-encoded WAL messages to an output stream.
