@@ -57,6 +57,9 @@ type BlockExecutor struct {
 
 	// path to the chain data metadata file
 	chainDataMetadataPath string
+
+	// async compactor for database compaction (prevents concurrent compactions)
+	compactor *Compactor
 }
 
 type BlockExecutorOption func(executor *BlockExecutor)
@@ -119,6 +122,15 @@ func NewBlockExecutor(
 
 func (blockExec *BlockExecutor) Store() Store {
 	return blockExec.store
+}
+
+// InitCompactor initializes the async compactor for database compaction
+// This method should be called after the BlockExecutor is created to set up
+// the compactor with the appropriate database
+func (blockExec *BlockExecutor) InitCompactor() {
+	if blockExec.compactor == nil {
+		blockExec.compactor = NewCompactor(blockExec.logger)
+	}
 }
 
 // SetEventBus - sets the event bus for publishing block related events.
@@ -916,6 +928,29 @@ func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64, state State) (ui
 
 	// Note: WAL pruning should be done separately from the consensus state
 	// as the WAL is managed by the consensus state, not the block executor
+
+	// Compact databases asynchronously after pruning to reclaim disk space
+	// Use the async compactor to prevent concurrent compactions
+
+	if blockExec.compactor == nil {
+		blockExec.InitCompactor()
+	}
+	if blockExec.compactor != nil && currentHeight%100 == 0 { // compact every 100 blocks
+		task := compactTask{
+			start:       nil,
+			limit:       nil,
+			label:       "post_pruning_compaction",
+			stateStore:  blockExec.store,
+			blockStore:  blockExec.blockStore,
+			compactBoth: true,
+		}
+
+		if blockExec.compactor.TryEnqueue(task) {
+			blockExec.logger.Info("enqueued async database compaction after pruning")
+		} else {
+			blockExec.logger.Debug("skipped async compaction - already in progress or queue full")
+		}
+	}
 
 	return amountPruned, nil
 }

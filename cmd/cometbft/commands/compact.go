@@ -41,7 +41,7 @@ Currently, only GoLevelDB is supported.
 	},
 }
 
-func NewCompactGoLevelDBCmd(rootCmd *cobra.Command, hidden bool) *cobra.Command {
+func NewCompactGoLevelDBCmd(rootCmd *cobra.Command, hidden bool, defaultNodeHome string) *cobra.Command {
 	flagZsh := "zsh"
 	cmd := &cobra.Command{
 		Use:   "experimental-compact-goleveldb",
@@ -51,7 +51,7 @@ and blockstores to reduce disk space for a pruning node. This should only be run
 once the node has stopped. This command will likely be omitted in the future after
 the planned refactor to the storage engine.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			compactGoLevelDBs(config.RootDir, logger)
+			compactGoLevelDBs(defaultNodeHome, logger)
 			return nil
 		},
 		Hidden: hidden,

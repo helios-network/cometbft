@@ -40,6 +40,8 @@ type BlockStore interface {
 	DeleteLatestBlock() error
 
 	Close() error
+	// CompactBlockStore compacte la base de données du block store
+	CompactBlockStore() error
 }
 
 //-----------------------------------------------------------------------------

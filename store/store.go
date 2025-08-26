@@ -776,3 +776,10 @@ func (bs *BlockStore) DeleteLatestBlock() error {
 	bs.height = targetHeight - 1
 	return bs.saveStateAndWriteDB(batch, "failed to delete the latest block")
 }
+
+// CompactBlockStore compacte la base de données du block store
+func (bs *BlockStore) CompactBlockStore() error {
+	bs.mtx.RLock()
+	defer bs.mtx.RUnlock()
+	return bs.db.Compact(nil, nil)
+}
