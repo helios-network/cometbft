@@ -779,7 +779,5 @@ func (bs *BlockStore) DeleteLatestBlock() error {
 
 // CompactBlockStore compacte la base de données du block store
 func (bs *BlockStore) CompactBlockStore() error {
-	bs.mtx.RLock()
-	defer bs.mtx.RUnlock()
 	return bs.db.Compact(nil, nil)
 }
