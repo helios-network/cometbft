@@ -1,4 +1,4 @@
-VERSION=${VERSION:-"v0.50.10-helios-20"}
+VERSION=${VERSION:-"v0.50.10-helios-21"}
 
 echo "Deploy cometbft"
 git add .
