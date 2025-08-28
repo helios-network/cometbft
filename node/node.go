@@ -65,6 +65,7 @@ type Node struct {
 	eventBus          *types.EventBus // pub/sub for services
 	stateStore        sm.Store
 	blockStore        *store.BlockStore // store the blockchain to disk
+	blockExecutor     *sm.BlockExecutor // block executor for consensus and blocksync
 	bcReactor         p2p.Reactor       // for block-syncing
 	mempoolReactor    p2p.Reactor       // for gossipping transactions
 	mempool           mempl.Mempool
@@ -508,6 +509,7 @@ func NewNodeWithContext(ctx context.Context,
 		indexerService:   indexerService,
 		blockIndexer:     blockIndexer,
 		eventBus:         eventBus,
+		blockExecutor:    blockExec,
 	}
 	node.BaseService = *service.NewBaseService(logger, "Node", node)
 
@@ -562,6 +564,12 @@ func (n *Node) OnStart() error {
 	err = n.sw.Start()
 	if err != nil {
 		return err
+	}
+
+	// Initialize the block executor compactor if available
+	if n.blockExecutor != nil {
+		n.blockExecutor.InitCompactor()
+		n.Logger.Info("Initialized block executor compactor")
 	}
 
 	// Always connect to persistent peers
@@ -647,6 +655,12 @@ func (n *Node) OnStop() {
 		n.Logger.Info("Closing statestore")
 		if err := n.stateStore.Close(); err != nil {
 			n.Logger.Error("problem closing statestore", "err", err)
+		}
+	}
+	if n.blockExecutor != nil {
+		n.Logger.Info("Closing block executor")
+		if err := n.blockExecutor.Close(); err != nil {
+			n.Logger.Error("problem closing block executor", "err", err)
 		}
 	}
 	if n.evidencePool != nil {

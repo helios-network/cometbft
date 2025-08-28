@@ -126,11 +126,29 @@ func (blockExec *BlockExecutor) Store() Store {
 
 // InitCompactor initializes the async compactor for database compaction
 // This method should be called after the BlockExecutor is created to set up
-// the compactor with the appropriate database
+// the compactor
 func (blockExec *BlockExecutor) InitCompactor() {
 	if blockExec.compactor == nil {
 		blockExec.compactor = NewCompactor(blockExec.logger)
 	}
+}
+
+// StopCompactor stops the async compactor gracefully
+func (blockExec *BlockExecutor) StopCompactor() {
+	if blockExec.compactor != nil {
+		blockExec.compactor.Stop()
+		blockExec.compactor = nil
+	}
+}
+
+// Close arrête proprement le BlockExecutor et ses composants
+func (blockExec *BlockExecutor) Close() error {
+	// Arrêter le compactor
+	blockExec.StopCompactor()
+
+	// Autres nettoyages si nécessaire
+	blockExec.logger.Info("BlockExecutor closed")
+	return nil
 }
 
 // SetEventBus - sets the event bus for publishing block related events.
@@ -931,11 +949,7 @@ func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64, state State) (ui
 
 	// Compact databases asynchronously after pruning to reclaim disk space
 	// Use the async compactor to prevent concurrent compactions
-
-	if blockExec.compactor == nil {
-		blockExec.InitCompactor()
-	}
-	if blockExec.compactor != nil && currentHeight%100 == 0 { // compact every 100 blocks
+	if currentHeight%100 == 0 { // compact every 100 blocks
 		task := compactTask{
 			start:       nil,
 			limit:       nil,
