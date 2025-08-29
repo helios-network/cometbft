@@ -570,6 +570,10 @@ func (n *Node) OnStart() error {
 	if n.blockExecutor != nil {
 		n.blockExecutor.InitCompactor()
 		n.Logger.Info("Initialized block executor compactor")
+
+		// Initialize the block executor pruner
+		n.blockExecutor.InitPruner()
+		n.Logger.Info("Initialized block executor pruner")
 	}
 
 	// Always connect to persistent peers

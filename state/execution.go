@@ -18,7 +18,6 @@ import (
 	"github.com/cometbft/cometbft/types"
 )
 
-//-----------------------------------------------------------------------------
 // BlockExecutor handles block execution and state updates.
 // It exposes ApplyBlock(), which validates & executes the block, updates state w/ ABCI responses,
 // then commits and updates the mempool atomically, then saves state.
@@ -53,6 +52,7 @@ type BlockExecutor struct {
 
 	logger log.Logger
 
+	// metrics
 	metrics *Metrics
 
 	// path to the chain data metadata file
@@ -60,6 +60,9 @@ type BlockExecutor struct {
 
 	// async compactor for database compaction (prevents concurrent compactions)
 	compactor *Compactor
+
+	// async pruner for pruning operations
+	pruner *Pruner
 }
 
 type BlockExecutorOption func(executor *BlockExecutor)
@@ -141,10 +144,50 @@ func (blockExec *BlockExecutor) StopCompactor() {
 	}
 }
 
+// InitPruner initializes the async pruner for pruning operations
+// This method should be called after the BlockExecutor is created to set up
+// the pruner with the appropriate callbacks
+func (blockExec *BlockExecutor) InitPruner() {
+	if blockExec.pruner == nil {
+		callbacks := PruneCallbacks{
+			PruneBlockStore: func(retainHeight int64, state State) (uint64, [][]byte, int64, error) {
+				return blockExec.blockStore.PruneBlocks(retainHeight, state)
+			},
+			PruneStateStore: func(base, retainHeight, prunedHeaderHeight int64) error {
+				return blockExec.store.PruneStates(base, retainHeight, prunedHeaderHeight)
+			},
+			PruneTransactionIndexer: func(base, retainHeight int64) error {
+				if blockExec.txIndexer != nil {
+					return blockExec.txIndexer.PruneTransactionsFromTo(base, retainHeight)
+				}
+				return nil
+			},
+			PruneBlockIndexer: func(base, retainHeight int64) error {
+				if blockExec.blockIndexer != nil {
+					return blockExec.blockIndexer.PruneBlocks(base, retainHeight)
+				}
+				return nil
+			},
+		}
+		blockExec.pruner = NewPruner(blockExec.logger, callbacks)
+	}
+}
+
+// StopPruner stops the async pruner gracefully
+func (blockExec *BlockExecutor) StopPruner() {
+	if blockExec.pruner != nil {
+		blockExec.pruner.Stop()
+		blockExec.pruner = nil
+	}
+}
+
 // Close arrête proprement le BlockExecutor et ses composants
 func (blockExec *BlockExecutor) Close() error {
 	// Arrêter le compactor
 	blockExec.StopCompactor()
+
+	// Arrêter le pruner
+	blockExec.StopPruner()
 
 	// Autres nettoyages si nécessaire
 	blockExec.logger.Info("BlockExecutor closed")
@@ -392,7 +435,7 @@ func (blockExec *BlockExecutor) applyBlock(state State, blockID types.BlockID, b
 	fail.Fail() // XXX
 	// Prune old heights, if requested by ABCI app.
 	if types.GetRetainHeightWithoutFlags(retainHeight) > 0 || types.IsRetainHeightArchive(retainHeight) {
-		pruned, err := blockExec.pruneBlocks(retainHeight, state)
+		pruned, err := blockExec.pruneBlocks(retainHeight, blockExec.blockStore.Height(), state)
 		if err != nil {
 			blockExec.logger.Error("failed to prune blocks", "archive", types.IsRetainHeightArchive(retainHeight), "retain_height", types.GetRetainHeightWithoutFlags(retainHeight), "err", err)
 		} else {
@@ -891,56 +934,38 @@ func ExecCommitBlock(
 	return resp.AppHash, nil
 }
 
-func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64, state State) (uint64, error) {
+func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64, currentHeight int64, state State) (uint64, error) {
 	base := blockExec.blockStore.Base()
-	currentHeight := blockExec.blockStore.Height()
 	isArchive := types.IsRetainHeightArchive(retainHeight)
 	retainHeightNumber := types.GetRetainHeightWithoutFlags(retainHeight)
-
-	if retainHeightNumber <= base {
-		return 0, nil
-	}
-
 	amountPruned := uint64(0)
 
-	if base+100 < retainHeightNumber { // max 100 blocks per 100 blocks pruning
+	// Limit pruning to max 100 blocks at a time
+	if base+100 < retainHeightNumber {
 		retainHeightNumber = base + 100
-		fmt.Println("pruning cometbft 100 blocks from", base, "to", retainHeightNumber)
+		fmt.Println("pruning cometbft 100 blocks from", base, "to", retainHeight)
 	}
 
-	if !isArchive {
-		fmt.Println("pruning blocks retainHeightNumber", retainHeightNumber, "currentHeight", currentHeight, "base", base, "isArchive", isArchive)
-		amountPrunedBlocks, _, prunedHeaderHeight, err := blockExec.blockStore.PruneBlocks(retainHeightNumber, state)
-		if err != nil {
-			fmt.Printf("failed to prune block store: %s", err.Error())
+	if blockExec.pruner != nil && !isArchive {
+		task := pruneTask{
+			base:              base,
+			retainHeight:      retainHeightNumber,
+			currentHeight:     currentHeight,
+			state:             state,
+			label:             "block_pruning",
+			pruneBlocks:       true,
+			pruneStates:       true,
+			pruneTransactions: blockExec.txIndexer != nil,
+			pruneBlockIndexer: blockExec.blockIndexer != nil,
 		}
-		amountPruned = amountPrunedBlocks
-		// Prune the state store
-		err = blockExec.Store().PruneStates(base, retainHeightNumber, prunedHeaderHeight)
-		if err != nil {
-			fmt.Printf("failed to prune state store: %s", err.Error())
-		}
-	}
 
-	// Prune transaction indexer if available
-	if blockExec.txIndexer != nil {
-		err := blockExec.txIndexer.PruneTransactionsFromTo(base, retainHeightNumber)
-		if err != nil {
-			blockExec.logger.Error("failed to prune transaction indexer", "err", err)
-			// Don't fail the entire pruning process if tx indexer pruning fails
+		if blockExec.pruner.TryEnqueue(task) {
+			blockExec.logger.Info("enqueued async pruning operation", "from", base, "to", retainHeight)
+			// Return immediately - pruning will happen asynchronously
+			return 0, nil
 		} else {
-			blockExec.logger.Info("pruned transaction indexer", "from_height", base, "to_height", retainHeightNumber)
-		}
-	}
-
-	// Prune block indexer if available
-	if blockExec.blockIndexer != nil {
-		err := blockExec.blockIndexer.PruneBlocks(base, retainHeightNumber)
-		if err != nil {
-			blockExec.logger.Error("failed to prune block indexer", "err", err)
-			// Don't fail the entire pruning process if block indexer pruning fails
-		} else {
-			blockExec.logger.Info("pruned block indexer", "from_height", base, "to_height", retainHeightNumber)
+			blockExec.logger.Debug("skipped async pruning - already in progress or queue full")
+			// Fallback to synchronous pruning if async is busy
 		}
 	}
 
