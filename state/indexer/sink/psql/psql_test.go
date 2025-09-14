@@ -44,8 +44,8 @@ const (
 	dbName   = "postgres"
 	chainID  = "test-chainID"
 
-	viewBlockEvents = "block_events"
-	viewTxEvents    = "tx_events"
+	// viewBlockEvents removed for Helios (block events disabled)
+	viewTxEvents = "tx_events"
 )
 
 func TestMain(m *testing.M) {
@@ -347,15 +347,8 @@ SELECT height FROM `+tableBlocks+` WHERE height = $1;
 		t.Fatalf("Database query failed: %v", err)
 	}
 
-	// Verify the presence of begin_block and end_block events.
-	if err := testDB().QueryRow(`
-SELECT type, height, chain_id FROM `+viewBlockEvents+`
-  WHERE height = $1 AND type = $2 AND chain_id = $3;
-`, height, eventTypeFinalizeBlock, chainID).Err(); err == sql.ErrNoRows {
-		t.Errorf("No %q event found for height=%d", eventTypeFinalizeBlock, height)
-	} else if err != nil {
-		t.Fatalf("Database query failed: %v", err)
-	}
+	// Block events verification disabled for Helios blockchain
+	// Original block events test removed since block indexing is disabled
 }
 
 // verifyNotImplemented calls f and verifies that it returns both a

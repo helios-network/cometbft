@@ -10,7 +10,7 @@ import (
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/libs/log"
-	blockidxkv "github.com/cometbft/cometbft/state/indexer/block/kv"
+	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cometbft/cometbft/state/txindex/kv"
 	"github.com/cometbft/cometbft/types"
@@ -31,7 +31,7 @@ func TestIndexerServiceIndexesBlocks(t *testing.T) {
 	// tx indexer
 	store := db.NewMemDB()
 	txIndexer := kv.NewTxIndex(store)
-	blockIndexer := blockidxkv.New(db.NewPrefixDB(store, []byte("block_events")))
+	blockIndexer := &indexer.NullBlockIndexer{}
 
 	service := txindex.NewIndexerService(txIndexer, blockIndexer, eventBus, false)
 	service.SetLogger(log.TestingLogger())
@@ -84,9 +84,10 @@ func TestIndexerServiceIndexesBlocks(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, txResult1, res)
 
+	// Block indexing is disabled for Helios, so Has should return false
 	ok, err := blockIndexer.Has(1)
 	require.NoError(t, err)
-	require.True(t, ok)
+	require.False(t, ok)
 
 	res, err = txIndexer.Get(types.Tx("bar").Hash())
 	require.NoError(t, err)

@@ -14,7 +14,6 @@ import (
 	"github.com/cometbft/cometbft/libs/progressbar"
 	"github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/state/indexer"
-	blockidxkv "github.com/cometbft/cometbft/state/indexer/block/kv"
 	"github.com/cometbft/cometbft/state/indexer/sink/psql"
 	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cometbft/cometbft/state/txindex/kv"
@@ -123,7 +122,8 @@ func loadEventSinks(cfg *cmtcfg.Config, chainID string) (indexer.BlockIndexer, t
 		}
 
 		txIndexer := kv.NewTxIndex(store)
-		blockIndexer := blockidxkv.New(dbm.NewPrefixDB(store, []byte("block_events")))
+		// Use null block indexer for Helios (block events disabled)
+		blockIndexer := &indexer.NullBlockIndexer{}
 		return blockIndexer, txIndexer, nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported event sink type: %s", cfg.TxIndex.Indexer)

@@ -71,11 +71,7 @@ CREATE VIEW event_attributes AS
   SELECT block_id, tx_id, type, key, composite_key, value
   FROM events LEFT JOIN attributes ON (events.rowid = attributes.event_id);
 
--- A joined view of all block events (those having tx_id NULL).
-CREATE VIEW block_events AS
-  SELECT blocks.rowid as block_id, height, chain_id, type, key, composite_key, value
-  FROM blocks JOIN event_attributes ON (blocks.rowid = event_attributes.block_id)
-  WHERE event_attributes.tx_id IS NULL;
+-- Block events view removed for Helios blockchain (block events disabled)
 
 -- A joined view of all transaction events.
 CREATE VIEW tx_events AS
