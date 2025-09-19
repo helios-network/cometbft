@@ -13,8 +13,9 @@ import (
 	rpccore "github.com/cometbft/cometbft/rpc/core"
 	"github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/state/indexer"
-	"github.com/cometbft/cometbft/state/indexer/block"
 	"github.com/cometbft/cometbft/state/txindex"
+	"github.com/cometbft/cometbft/state/txindex/kv"
+	"github.com/cometbft/cometbft/state/txindex/null"
 	"github.com/cometbft/cometbft/store"
 	"github.com/cometbft/cometbft/types"
 
@@ -78,14 +79,25 @@ func NewFromConfig(cfg *config.Config) (*Inspector, error) {
 	if err != nil {
 		return nil, err
 	}
-	genDoc, err := types.GenesisDocFromFile(cfg.GenesisFile())
+	_, err = types.GenesisDocFromFile(cfg.GenesisFile())
 	if err != nil {
 		return nil, err
 	}
-	txidx, blkidx, err := block.IndexerFromConfig(cfg, config.DefaultDBProvider, genDoc.ChainID)
-	if err != nil {
-		return nil, err
+	// Create tx indexer based on config
+	var txidx txindex.TxIndexer
+	switch cfg.TxIndex.Indexer {
+	case "kv":
+		store, err := config.DefaultDBProvider(&config.DBContext{ID: "tx_index", Config: cfg})
+		if err != nil {
+			return nil, err
+		}
+		txidx = kv.NewTxIndex(store)
+	default:
+		txidx = &null.TxIndex{}
 	}
+
+	// Always use null block indexer for Helios (block events disabled)
+	blkidx := &indexer.NullBlockIndexer{}
 	ss := state.NewStore(sDB, state.StoreOptions{})
 	return New(cfg.RPC, bs, ss, txidx, blkidx), nil
 }

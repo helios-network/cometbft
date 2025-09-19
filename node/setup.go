@@ -31,8 +31,9 @@ import (
 	"github.com/cometbft/cometbft/proxy"
 	sm "github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/state/indexer"
-	"github.com/cometbft/cometbft/state/indexer/block"
 	"github.com/cometbft/cometbft/state/txindex"
+	"github.com/cometbft/cometbft/state/txindex/kv"
+	"github.com/cometbft/cometbft/state/txindex/null"
 	"github.com/cometbft/cometbft/store"
 	"github.com/cometbft/cometbft/types"
 	"github.com/cometbft/cometbft/version"
@@ -150,11 +151,23 @@ func createAndStartIndexerService(
 		blockIndexer indexer.BlockIndexer
 	)
 
-	txIndexer, blockIndexer, allIndexersDisabled, err := block.IndexerFromConfigWithDisabledIndexers(config, dbProvider, chainID)
-	if err != nil {
-		return nil, nil, nil, err
+	// Create tx indexer based on config
+	switch config.TxIndex.Indexer {
+	case "kv":
+		store, err := dbProvider(&cfg.DBContext{ID: "tx_index", Config: config})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		txIndexer = kv.NewTxIndex(store)
+	default:
+		txIndexer = &null.TxIndex{}
 	}
-	if allIndexersDisabled {
+
+	// Always use null block indexer for Helios (block events disabled)
+	blockIndexer = &indexer.NullBlockIndexer{}
+
+	// Check if all indexers are disabled
+	if config.TxIndex.Indexer == "" || config.TxIndex.Indexer == "null" {
 		return nil, txIndexer, blockIndexer, nil
 	}
 

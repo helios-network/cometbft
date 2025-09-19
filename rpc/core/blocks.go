@@ -10,7 +10,7 @@ import (
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
-	blockidxnull "github.com/cometbft/cometbft/state/indexer/block/null"
+	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/types"
 )
 
@@ -365,7 +365,7 @@ func (env *Environment) BlockSearch(
 	orderBy string,
 ) (*ctypes.ResultBlockSearch, error) {
 	// skip if block indexing is disabled
-	if _, ok := env.BlockIndexer.(*blockidxnull.BlockerIndexer); ok {
+	if _, ok := env.BlockIndexer.(*indexer.NullBlockIndexer); ok {
 		return nil, errors.New("block indexing is disabled")
 	}
 

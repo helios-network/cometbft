@@ -8,12 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/inspect"
-	"github.com/cometbft/cometbft/state"
-	"github.com/cometbft/cometbft/state/indexer/block"
-	"github.com/cometbft/cometbft/store"
-	"github.com/cometbft/cometbft/types"
 )
 
 // InspectCmd is the command for starting an inspect server.
@@ -55,29 +50,10 @@ func runInspect(cmd *cobra.Command, _ []string) error {
 		cancel()
 	}()
 
-	blockStoreDB, err := cfg.DefaultDBProvider(&cfg.DBContext{ID: "blockstore", Config: config})
+	ins, err := inspect.NewFromConfig(config)
 	if err != nil {
 		return err
 	}
-	blockStore := store.NewBlockStore(blockStoreDB)
-	defer blockStore.Close()
-
-	stateDB, err := cfg.DefaultDBProvider(&cfg.DBContext{ID: "state", Config: config})
-	if err != nil {
-		return err
-	}
-	stateStore := state.NewStore(stateDB, state.StoreOptions{DiscardABCIResponses: false})
-	defer stateStore.Close()
-
-	genDoc, err := types.GenesisDocFromFile(config.GenesisFile())
-	if err != nil {
-		return err
-	}
-	txIndexer, blockIndexer, err := block.IndexerFromConfig(config, cfg.DefaultDBProvider, genDoc.ChainID)
-	if err != nil {
-		return err
-	}
-	ins := inspect.New(config.RPC, blockStore, stateStore, txIndexer, blockIndexer)
 
 	logger.Info("starting inspect server")
 	return ins.Run(ctx)
