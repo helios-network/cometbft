@@ -8,6 +8,7 @@ import (
 
 type ChainDataMetadata struct {
 	ChainID    string   `json:"chain_id"`
+	Version    string   `json:"version"`
 	Height     int64    `json:"height"`
 	Hash       string   `json:"hash"`
 	Time       string   `json:"time"`

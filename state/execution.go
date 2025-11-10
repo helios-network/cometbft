@@ -3,7 +3,10 @@ package state
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"os/exec"
+	"strings"
 	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
@@ -858,6 +861,31 @@ func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64, state State) (ui
 	return amountPruned, nil
 }
 
+func (blockExec *BlockExecutor) getHeliadesBinaryPath() string {
+	command := exec.Command("which", "heliades")
+	output, err := command.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func (blockExec *BlockExecutor) getAppVersion() string {
+	heliadesPath := blockExec.getHeliadesBinaryPath()
+	output, err := exec.Command(heliadesPath, "version").Output()
+	if err != nil {
+		return ""
+	}
+	var version struct {
+		Version string `json:"version"`
+	}
+	err = json.Unmarshal(output, &version)
+	if err != nil {
+		return ""
+	}
+	return version.Version
+}
+
 // updateChainDataMetadata updates the chain data metadata file with the latest block information
 func (blockExec *BlockExecutor) updateChainDataMetadata(block *types.Block, state State) error {
 	// Use the configured path, or skip if not configured
@@ -866,9 +894,12 @@ func (blockExec *BlockExecutor) updateChainDataMetadata(block *types.Block, stat
 		return nil
 	}
 
+	appVersion := blockExec.getAppVersion()
+
 	// Create the metadata structure
 	chainDataMetadata := types.ChainDataMetadata{
 		ChainID:    state.ChainID,
+		Version:    appVersion,
 		Height:     block.Height,
 		Hash:       block.Hash().String(),
 		Time:       block.Time.Format(time.RFC3339),
