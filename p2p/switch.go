@@ -337,7 +337,9 @@ func (sw *Switch) StopPeerForError(peer Peer, reason interface{}) {
 		return
 	}
 
-	sw.Logger.Error("Stopping peer for error", "peer", peer, "err", reason)
+	if reason != "EOF" {
+		sw.Logger.Error("Stopping peer for EOF", "peer", peer)
+	}
 	sw.stopAndRemovePeer(peer, reason)
 
 	if peer.IsPersistent() {

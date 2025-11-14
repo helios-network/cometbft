@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"reflect"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -324,7 +325,11 @@ func (wsc *wsConnection) readRoutine() {
 				if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 					wsc.Logger.Info("Client closed the connection")
 				} else {
-					wsc.Logger.Error("Failed to read request", "err", err)
+					if strings.Contains(err.Error(), "EOF") {
+						wsc.Logger.Info("Client closed the connection by EOF")
+					} else {
+						wsc.Logger.Error("Failed to read request", "err", err)
+					}
 				}
 				if err := wsc.Stop(); err != nil {
 					wsc.Logger.Error("Error closing websocket connection", "err", err)
