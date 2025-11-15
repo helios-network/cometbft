@@ -52,6 +52,8 @@ type BlockExecutor struct {
 
 	// path to the chain data metadata file
 	chainDataMetadataPath string
+
+	appVersion string
 }
 
 type BlockExecutorOption func(executor *BlockExecutor)
@@ -89,6 +91,7 @@ func NewBlockExecutor(
 		logger:     logger,
 		metrics:    NopMetrics(),
 		blockStore: blockStore,
+		appVersion: "",
 	}
 
 	for _, option := range options {
@@ -894,12 +897,15 @@ func (blockExec *BlockExecutor) updateChainDataMetadata(block *types.Block, stat
 		return nil
 	}
 
-	appVersion := blockExec.getAppVersion()
+	// Get the app version at the first block produced at runtime. This is used to identify the app version in the chain data metadata file.
+	if blockExec.appVersion == "" {
+		blockExec.appVersion = blockExec.getAppVersion()
+	}
 
 	// Create the metadata structure
 	chainDataMetadata := types.ChainDataMetadata{
 		ChainID:    state.ChainID,
-		Version:    appVersion,
+		Version:    blockExec.appVersion,
 		Height:     block.Height,
 		Hash:       block.Hash().String(),
 		Time:       block.Time.Format(time.RFC3339),
