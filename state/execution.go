@@ -868,6 +868,7 @@ func (blockExec *BlockExecutor) getHeliadesBinaryPath() string {
 	command := exec.Command("which", "heliades")
 	output, err := command.Output()
 	if err != nil {
+		blockExec.logger.Error("failed to get heliades binary path", "err", err)
 		return ""
 	}
 	return strings.TrimSpace(string(output))
